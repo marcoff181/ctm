@@ -83,7 +83,16 @@ def main():
     mark, watermarked = embedding(image, mark_size, alpha, v)
     threshold, _ = compute_threshold(mark_size, mark, N=1000)
     
-    print(f"Threshold: {threshold:.4f}\n")
+    print(f"Watermark Quality:")
+    print(f"  PSNR:  {psnr(image, watermarked):6.2f} dB")
+    print(f"  WPSNR: {wpsnr(image, watermarked):6.2f} dB")
+    print(f"\nThreshold: {threshold:.4f}\n")
+    
+    # Test watermark detection on clean watermarked image (should detect!)
+    extracted_clean = detection(image, watermarked, alpha, mark_size, v)
+    sim_clean = similarity(mark, extracted_clean)
+    print(f"Clean watermarked image similarity: {sim_clean:.4f} (should be ~1.0)\n")
+    
     print(f"{'='*60}")
     print(f"ATTACK RESULTS")
     print(f"{'='*60}\n")
@@ -107,18 +116,18 @@ def main():
         wpsnr_val = wpsnr(watermarked, attacked)
         
         # Detect watermark
-        extracted = detection(watermarked, attacked, alpha, mark_size, v)
+        extracted = detection(image, attacked, alpha, mark_size, v)
         sim = similarity(mark, extracted)
         detected = sim > threshold
         
         # Print result
         status = "DETECTED" if detected else "NOT DETECTED"
-        icon = "✗" if detected else "✓"
+        icon = "✓" if detected else "✗"
         
         print(f"{attack_name:12s} {icon}")
         print(f"  PSNR:       {psnr_val:6.2f} dB")
         print(f"  WPSNR:      {wpsnr_val:6.2f} dB")
-        print(f"  Similarity: {sim:6.4f}")
+        print(f"  Similarity: {sim:6.4f} (threshold: {threshold:.4f})")
         print(f"  Status:     {status}\n")
     
     print(f"{'='*60}\n")

@@ -1,51 +1,61 @@
 import numpy as np
-from scipy.fft import dct
 
 
-def detection(image, watermarked, alpha, mark_size, v='multiplicative', freq_range='high'):
-    ori_dct = dct(dct(image, axis=0, norm='ortho'), axis=1, norm='ortho')
-    wat_dct = dct(dct(watermarked, axis=0, norm='ortho'), axis=1, norm='ortho')
+def detection(image, watermarked, alpha=None, mark_size=1024, v=None, **kwargs):
+    """LSB watermark extraction - extracts watermark from least significant bits"""
+    # Convert to uint8
+    image = image.astype(np.uint8)
+    watermarked = watermarked.astype(np.uint8)
     
-    # Use absolute values for location selection only
-    abs_dct = abs(ori_dct)
-    locations = np.argsort(-abs_dct, axis=None)
-    rows = image.shape[0]
-    locations = [(val // rows, val % rows) for val in locations]
+    # Flatten watermarked image
+    flat_watermarked = watermarked.flatten()
     
-    # Select frequency range
-    if freq_range == 'high':
-        selected_locs = locations[1:mark_size + 1]
-    elif freq_range == 'mid':
-        selected_locs = locations[500:500 + mark_size]
-    elif freq_range == 'low':
-        selected_locs = locations[100:100 + mark_size]
-    else:
-        selected_locs = locations[1:mark_size + 1]
+    # Extract LSB from first mark_size pixels
+    w_ex = np.zeros(mark_size, dtype=np.uint8)
     
-    w_ex = np.zeros(mark_size, dtype=np.float64)
-    
-    for idx, loc in enumerate(selected_locs):
-        if v == 'additive':
-            w_ex[idx] = (wat_dct[loc] - ori_dct[loc]) / alpha
-        elif v == 'multiplicative':
-            w_ex[idx] = (wat_dct[loc] - ori_dct[loc]) / (alpha * ori_dct[loc])
+    for i in range(mark_size):
+        # Extract LSB
+        w_ex[i] = flat_watermarked[i] & 0x01
     
     return w_ex
-   
 
 
 def similarity(X, X_star):
-    s = np.sum(np.multiply(X, X_star)) / (np.sqrt(np.sum(np.multiply(X, X))) * np.sqrt(np.sum(np.multiply(X_star, X_star))))
-    return s
+    """Compute bit error rate (BER) based similarity for binary watermarks"""
+    # Convert to binary if needed
+    X = (X > 0.5).astype(np.uint8)
+    X_star = (X_star > 0.5).astype(np.uint8)
+    
+    # Calculate number of matching bits
+    matches = np.sum(X == X_star)
+    total = len(X)
+    
+    # Similarity: 1.0 = perfect match, 0.0 = all bits different
+    similarity = matches / total
+    
+    return similarity
 
 
-def compute_threshold(mark_size, w, N):
+def compute_threshold(mark_size, w, N=1000):
+    """Compute detection threshold using Monte Carlo simulation for binary watermarks"""
+    np.random.seed(42)
     SIM = np.zeros(N)
+    
+    # Convert watermark to binary
+    w_binary = (w > 0.5).astype(np.uint8)
+    
     for i in range(N):
-        r = np.random.uniform(0.0, 1.0, mark_size)
-        SIM[i] = similarity(w, r)
+        # Generate random binary sequence
+        r = np.random.randint(0, 2, mark_size, dtype=np.uint8)
+        SIM[i] = similarity(w_binary, r)
+    
     SIMs = SIM.copy()
     SIM.sort()
-    t = SIM[-1]
-    T = t + (0.1 * t)
+    
+    # Threshold: mean + 3*std (for binary, expected ~0.5 for random)
+    mean_sim = np.mean(SIM)
+    std_sim = np.std(SIM)
+    T = mean_sim + 3 * std_sim
+    
+    
     return T, SIMs
