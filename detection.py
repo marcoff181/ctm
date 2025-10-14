@@ -1,24 +1,64 @@
 import numpy as np
+from scipy.fft import dct
 
 
-def detection(image, watermarked, alpha=None, mark_size=1024, v=None, **kwargs):
-    """LSB watermark extraction - extracts watermark from least significant bits"""
-    # Convert to uint8
-    image = image.astype(np.uint8)
-    watermarked = watermarked.astype(np.uint8)
+# def detection(image, watermarked, alpha=None, mark_size=1024, v=None, **kwargs):
+#     """6th bit watermark extraction - extracts watermark from 6th bit"""
+#     # Convert to uint8
+#     image = image.astype(np.uint8)
+#     watermarked = watermarked.astype(np.uint8)
     
-    # Flatten watermarked image
-    flat_watermarked = watermarked.flatten()
+#     # Flatten watermarked image
+#     flat_watermarked = watermarked.flatten()
     
-    # Extract LSB from first mark_size pixels
-    w_ex = np.zeros(mark_size, dtype=np.uint8)
+#     # Calculate replication factor
+#     total_pixels = len(flat_watermarked)
+#     replication_factor = int(np.ceil(total_pixels / mark_size))
     
-    for i in range(mark_size):
-        # Extract LSB
-        w_ex[i] = flat_watermarked[i] & 0x01
+#     # Extract 6th bit from all pixels
+#     extracted_bits = np.zeros(total_pixels, dtype=np.uint8)
+#     for i in range(total_pixels):
+#         # Extract 6th bit (bit position 5) and shift it to LSB position
+#         extracted_bits[i] = (flat_watermarked[i] >> 6) & 0x01
     
+#     # Average replicated watermark bits to get original watermark
+#     w_ex = np.zeros(mark_size, dtype=np.uint8)
+#     for i in range(mark_size):
+#         # Collect all replicated instances of this watermark bit
+#         replicated_values = []
+#         for rep in range(replication_factor):
+#             idx = i + rep * mark_size
+#             if idx < total_pixels:
+#                 replicated_values.append(extracted_bits[idx])
+        
+#         # Use majority voting
+#         w_ex[i] = 1 if np.mean(replicated_values) >= 0.5 else 0
+    
+#     return w_ex
+
+
+def detection(image, watermarked, alpha, mark_size, v='multiplicative'):
+    ori_dct = dct(dct(image,axis=0, norm='ortho'),axis=1, norm='ortho')
+    wat_dct = dct(dct(watermarked,axis=0, norm='ortho'),axis=1, norm='ortho')
+
+    # Get the locations of the most perceptually significant components
+    ori_dct = abs(ori_dct)
+    wat_dct = abs(wat_dct)
+    locations = np.argsort(-ori_dct,axis=None) # - sign is used to get descending order
+    rows = image.shape[0]
+    locations = [(val//rows, val%rows) for val in locations] # locations as (x,y) coordinates
+
+    # Generate a watermark
+    w_ex = np.zeros(mark_size, dtype=np.float64)
+
+    # Embed the watermark
+    for idx, loc in enumerate(locations[1:mark_size+1]):
+        if v=='additive':
+            w_ex[idx] =  (wat_dct[loc] - ori_dct[loc]) /alpha
+        elif v=='multiplicative':
+            w_ex[idx] =  (wat_dct[loc] - ori_dct[loc]) / (alpha*ori_dct[loc])
+            
     return w_ex
-
 
 def similarity(X, X_star):
     """Compute bit error rate (BER) based similarity for binary watermarks"""

@@ -1,5 +1,6 @@
 import os
 import cv2
+from matplotlib import pyplot as plt
 import numpy as np
 from scipy.ndimage import gaussian_filter
 from scipy.signal import medfilt
@@ -54,7 +55,7 @@ def resizing(img, scale=0.7):
     return np.clip(result * 255, 0, 255).astype(np.uint8)
 
 
-def jpeg_compression(img, quality=100):
+def jpeg_compression(img, quality=70):
     """Apply JPEG compression."""
     img = Image.fromarray(img)
     img.save('tmp.jpg', "JPEG", quality=quality)
@@ -64,24 +65,45 @@ def jpeg_compression(img, quality=100):
     return result
 
 
+def show_images(img, watermarked):
+    # Reshape
+    # watermarked_img = pixels.reshape(np.shape(img))
+
+    # Show images side by side
+    plt.subplot(121)
+    plt.title('Original')
+    plt.imshow(img, cmap='gray')
+    plt.subplot(122)
+    plt.title('Watermarked')
+    plt.imshow(watermarked, cmap='gray')
+    plt.show()
+
+
 def main():
     """Test attacks on first image."""
     images_path = "./images"
-    alpha = 0.3
+    # alpha = 0.05
+    alpha = 24
     mark_size = 1024
-    v = 'multiplicative'
+    v = 'additive'
     
     # Load first image
-    filename = sorted(os.listdir(images_path))[0]
+    filename = sorted(os.listdir(images_path))[1]
     image_path = os.path.join(images_path, filename)
     image = cv2.imread(image_path, 0)
     
     print(f"Testing image: {filename}")
     print(f"{'='*60}\n")
     
+    mark = np.random.uniform(0.0, 1.0, mark_size)
+    mark = np.uint8(np.rint(mark))
+    np.save('mark.npy', mark)
+    
     # Embed watermark
-    mark, watermarked = embedding(image, mark_size, alpha, v)
+    watermarked = embedding(image, mark, alpha, v)
     threshold, _ = compute_threshold(mark_size, mark, N=1000)
+
+    show_images(image,watermarked)
     
     print(f"Watermark Quality:")
     print(f"  PSNR:  {psnr(image, watermarked):6.2f} dB")
