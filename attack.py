@@ -8,7 +8,8 @@ from skimage.transform import rescale
 from PIL import Image
 from embedding import embedding
 from detection import compute_threshold, detection, similarity
-from quality import psnr, wpsnr
+from quality import psnr
+from wpsnr import wpsnr
 
 
 def awgn(img, std=5.0):
