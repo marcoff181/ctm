@@ -1,67 +1,57 @@
-import os
 import numpy as np
 import cv2
-from scipy.fft import dct, idct
+import pywt
+import time
 
 
-# def embedding(image, mark_size, alpha=None, v=None, mark=None, **kwargs):
-#     """6th bit watermark embedding with replication"""
-#     image = image.astype(np.uint8)
-#     h, w = image.shape
-    
-#     # Generate binary watermark if not provided
-#     if mark is None:
-#         np.random.seed(42)
-#         mark = np.random.randint(0, 2, mark_size, dtype=np.uint8)
-    
-#     # Calculate replication factor needed
-#     total_pixels = h * w
-#     replication_factor = int(np.ceil(total_pixels / mark_size))
-    
-#     # Replicate watermark to fill entire image
-#     replicated_mark = np.tile(mark, replication_factor)[:total_pixels]
-    
-#     # Create watermarked image (copy)
-#     watermarked = image.copy()
-    
-#     # Flatten image for easier access
-#     flat_image = watermarked.flatten()
-    
-#     # Embed watermark in 6th bit (bit position 5, counting from 0)
-#     # Bit mask: 0xDF = 11011111 (clears 6th bit)
-#     # Shift watermark bit to 6th position
-#     for i in range(total_pixels):
-#         # Clear 6th bit and set it to watermark bit
-#         flat_image[i] = (flat_image[i] & 0xBF) | (replicated_mark[i] << 6)
-    
-#     # Reshape back to original dimensions
-#     watermarked = flat_image.reshape(h, w)
-    
-#     return mark, watermarked
+def get_watermark_svd(watermark_path):
+    """Load watermark and compute its SVD decomposition."""
+    watermark = np.load(watermark_path)
+    watermark_matrix = watermark.reshape(32, 32)
+    U, S, V = np.linalg.svd(watermark_matrix)
+    return watermark, U, S, V
 
 
-def embedding(image, mark, alpha, v='multiplicative'):
-    # Get the DCT transform of the image
-    ori_dct = dct(dct(image,axis=0, norm='ortho'),axis=1, norm='ortho')
-
-    # Get the locations of the most perceptually significant components
-    sign = np.sign(ori_dct)
-    ori_dct = abs(ori_dct)
-    locations = np.argsort(-ori_dct,axis=None) # - sign is used to get descending order
-    rows = image.shape[0]
-    locations = [(val//rows, val%rows) for val in locations] # locations as (x,y) coordinates
+def embedding(original_image_path, watermark_path, alpha=0.05):
+    """
+    Embed watermark by modifying singular values of HH subband.
     
+    Args:
+        original_image_path: Path to the original image
+        watermark_path: Path to the watermark .npy file
+        alpha: Embedding strength (default: 0.05)
+    
+    Returns:
+        watermarked_image: Image with embedded watermark
+        watermark: Original watermark array
+        U, V: SVD matrices needed for detection
+    """
+    # Load image and watermark
+    image = cv2.imread(original_image_path, 0)
+    watermark, Uwm, Swm, Vwm = get_watermark_svd(watermark_path)
 
-    # Embed the watermark
-    watermarked_dct = ori_dct.copy()
-    for idx, (loc,mark_val) in enumerate(zip(locations[1:], mark)):
-        if v == 'additive':
-            watermarked_dct[loc] += (alpha * mark_val)
-        elif v == 'multiplicative':
-            watermarked_dct[loc] *= 1 + (alpha * mark_val)
+    # Start timing
+    start = time.time()
 
-    # Restore sign and o back to spatial domain
-    watermarked_dct *= sign
-    watermarked = np.uint8(idct(idct(watermarked_dct,axis=1, norm='ortho'),axis=0, norm='ortho'))
+    # DWT decomposition
+    coeffs2 = pywt.dwt2(image, wavelet='haar')
+    LL, (LH, HL, HH) = coeffs2
 
-    return watermarked
+    # SVD on HH subband
+    Ui, Si, Vi = np.linalg.svd(HH)
+
+    # Embed watermark in singular values
+    S_new = Si.copy()
+    num_watermark_values = len(Swm)
+    for i in range(num_watermark_values):
+        S_new[i] = Si[i] + alpha * Swm[i]
+
+    # Reconstruct and inverse DWT
+    HH_new = Ui.dot(np.diag(S_new)).dot(Vi)
+    coeffs2_new = LL, (LH, HL, HH_new)
+    watermarked_image = pywt.idwt2(coeffs2_new, wavelet='haar')
+
+    end = time.time()
+    print(f"Embedding time: {end - start:.4f}s")
+
+    return watermarked_image, watermark, Uwm, Vwm
