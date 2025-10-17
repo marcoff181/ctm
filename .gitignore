@@ -208,6 +208,6 @@ __marimo__/
 
 
 # mineeeee
-attacked_group_images/*
-watermarked_group_images/*
+attacked_groups_images/*
+watermarked_groups_images/*
 challenge_images/*
