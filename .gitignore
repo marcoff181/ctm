@@ -208,6 +208,7 @@ __marimo__/
 
 
 # mineeeee
-attack_result/
+attacked_group_images/*
+watermarked_group_images/*
 mark.npy
 
