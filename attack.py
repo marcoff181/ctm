@@ -91,8 +91,10 @@ def main():
     print("CrispyMcMark Attack Suite")
     print("===============================================")
 
-    # Setup output directory
+    # Setup directories 
     os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(input_dir, exist_ok=True)
+    os.makedirs(originals_dir, exist_ok=True)
 
     # TODO: hardcode Uwm and Vwm inside the detection func
     _, _, Uwm, Vwm = embedding("./challenge_images/0002.bmp", mark_path, alpha)
