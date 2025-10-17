@@ -1,15 +1,28 @@
 import numpy as np
 import pywt
 from scipy.fft import dct
+from wpsnr import wpsnr
 
-def detection(input1, input2, input3, Uw, Vw, alpha):
-    image = input1.copy()
-    watermarked = input2.copy()
-    attacked = input3.copy()
+def detection(original, watermarked, attacked,Uw,Vw):
+    extracted_wm = extraction(original,attacked,Uw ,Vw )
+    original_wm = extraction(original,watermarked,Uw ,Vw )
 
+    # Measure quality
+    wpsnr_attack = wpsnr(watermarked, attacked)
+    
+    # Detect watermark
+    sim = similarity(original_wm, extracted_wm)
+
+
+    #  TODO: use ROC to compute final threshold
+    detected =  1 if sim > 0.7  else 0
+
+    return detected , wpsnr_attack
+
+def extraction(original,watermarked, Uw, Vw, alpha=0.2):
     # DWT decomposition
-    image_coeffs = pywt.dwt2(image, wavelet='haar')
-    attacked_coeffs = pywt.dwt2(attacked, wavelet='haar')
+    image_coeffs = pywt.dwt2(original, wavelet='haar')
+    attacked_coeffs = pywt.dwt2(watermarked, wavelet='haar')
 
     LLi, (LHi, HLi, HHi) = image_coeffs
     LLa, (LHa, HLa, HHa) = attacked_coeffs

@@ -8,258 +8,274 @@ from scipy.signal import medfilt
 from skimage.transform import rescale
 
 from embedding import embedding
-from detection import detection, similarity, compute_threshold
+from detection import detection, extraction, similarity, compute_threshold
 from wpsnr import wpsnr
+import pandas as pd
+from itertools import combinations
+from attack_functions import awgn, blur, sharpening, median, resizing, jpeg_compression
+from utilities import edges_mask , noisy_mask 
 
 
-# ============================================================================
 # Configuration
-# ============================================================================
+# images_path = "./images"
+alpha = 2.605
+mark_size = 1024
+mark_path = "./mark.npy"
+input_dir = "./watermarked_groups_images/"
+output_dir = "./attacked_groups_images/"
+originals_dir = "./challenge_images/"
+attacked_wpsnr_lower_bound = 35
 
-class Config:
-    """Simple configuration."""
-    images_path = "./images"
-    alpha = 0.005
-    mark_size = 1024
-    mark_path = "mark.npy"
-    image_index = 2
-    output_dir = "./attack_results"
-    save_images = True
+# conversion between the input value 0.0..1.0 and the actual parameters of each attack function
+param_converters = {
+    'JPEG':  lambda x: int(round((1 - x) * 100)),                 
+    'Blur':  lambda x: x * 10,                                   
+    'AWGN':  lambda x: x * 50,                                   
+    'Resize':lambda x: max(0.001, 0.5 ** (x * 10)),             
+    'Median':lambda x: [1, 3, 5, 7][int(round(x * 3))],        
+    'Sharp': lambda x: x * 3         
+}
 
+# attacks that take as input a strenght value `x` between 0.0 and 1.0
+attack_config = {
+    'JPEG':  lambda img, x: jpeg_compression(img, quality=param_converters['JPEG'](x)),
+    'Blur':  lambda img, x: blur(img, sigma=param_converters['Blur'](x)),
+    'AWGN':  lambda img, x: awgn(img, std=param_converters['AWGN'](x)),
+    'Resize':lambda img, x: resizing(img, scale=param_converters['Resize'](x)),
+    'Median':lambda img, x: median(img, kernel_size=param_converters['Median'](x)),
+    'Sharp': lambda img, x: sharpening(img,sigma=1.0,alpha=param_converters['Sharp'](x))
+}
 
-# ============================================================================
-# Attack Functions
-# ============================================================================
-
-def awgn(img, std=5.0):
-    """Add Additive White Gaussian Noise."""
-    np.random.seed(123)
-    noise = np.random.normal(0, std, img.shape)
-    return np.clip(img + noise, 0, 255).astype(np.uint8)
-
-
-def blur(img, sigma=3.0):
-    """Apply Gaussian blur."""
-    result = gaussian_filter(img, sigma)
-    return np.clip(result, 0, 255).astype(np.uint8)
-
-
-def sharpening(img, sigma=1.0, alpha=1.5):
-    """Apply sharpening filter."""
-    blurred = gaussian_filter(img, sigma)
-    result = img + alpha * (img - blurred)
-    return np.clip(result, 0, 255).astype(np.uint8)
-
-
-def median(img, kernel_size=3):
-    """Apply median filter."""
-    result = medfilt(img, kernel_size)
-    return result.astype(np.uint8)
-
-
-def resizing(img, scale=0.9):
-    """Apply resizing attack."""
-    h, w = img.shape
-    downscaled = rescale(img, scale, anti_aliasing=True)
-    upscaled = rescale(downscaled, 1/scale, anti_aliasing=True)
+# TODO: tweak iterations to find balance between speed and accuracy
+def bin_search_attack(original, watermarked, detection, Uwm, Vwm ,mask,iterations=6):
+    results = []
     
-    upscaled_h, upscaled_w = upscaled.shape
-    if upscaled_h >= h and upscaled_w >= w:
-        result = upscaled[:h, :w]
-    else:
-        result = np.zeros((h, w))
-        result[:upscaled_h, :upscaled_w] = upscaled
-    
-    return np.clip(result * 255, 0, 255).astype(np.uint8)
-
-
-def jpeg_compression(img, quality=70):
-    """Apply JPEG compression."""
-    temp_path = 'tmp.jpg'
-    img_pil = Image.fromarray(img)
-    img_pil.save(temp_path, "JPEG", quality=quality)
-    result = Image.open(temp_path)
-    result_array = np.asarray(result, dtype=np.uint8)
-    os.remove(temp_path)
-    return result_array
-
-
-# ============================================================================
-# Attack Suite
-# ============================================================================
-
-def get_attacks():
-    """Return list of attacks to test."""
-    return [
-        ('AWGN (std=3)', lambda img: awgn(img, std=3.0)),
-        ('AWGN (std=5)', lambda img: awgn(img, std=5.0)),
-        ('AWGN (std=10)', lambda img: awgn(img, std=10.0)),
-        ('Blur (σ=1)', lambda img: blur(img, sigma=1.0)),
-        ('Blur (σ=3)', lambda img: blur(img, sigma=3.0)),
-        ('Blur (σ=5)', lambda img: blur(img, sigma=5.0)),
-        ('Sharp (α=1.0)', lambda img: sharpening(img, sigma=1.0, alpha=1.0)),
-        ('Sharp (α=1.5)', lambda img: sharpening(img, sigma=1.0, alpha=1.5)),
-        ('Sharp (α=2.0)', lambda img: sharpening(img, sigma=1.0, alpha=2.0)),
-        ('Median (k=3)', lambda img: median(img, kernel_size=3)),
-        ('Median (k=5)', lambda img: median(img, kernel_size=5)),
-        ('Median (k=7)', lambda img: median(img, kernel_size=7)),
-        ('Resize (0.5x)', lambda img: resizing(img, scale=0.5)),
-        ('Resize (0.7x)', lambda img: resizing(img, scale=0.7)),
-        ('Resize (0.9x)', lambda img: resizing(img, scale=0.9)),
-        ('JPEG (Q=50)', lambda img: jpeg_compression(img, quality=50)),
-        ('JPEG (Q=70)', lambda img: jpeg_compression(img, quality=70)),
-        ('JPEG (Q=90)', lambda img: jpeg_compression(img, quality=90)),
-    ]
-
-
-# ============================================================================
-# Visualization
-# ============================================================================
-
-def show_images(img, watermarked):
-    """Display original and watermarked images."""
-    plt.subplot(121)
-    plt.title('Original')
-    plt.imshow(img, cmap='gray')
-    plt.axis('off')
-    
-    plt.subplot(122)
-    plt.title('Watermarked')
-    plt.imshow(watermarked, cmap='gray')
-    plt.axis('off')
-    
-    plt.tight_layout()
-    plt.show()
-
-
-def save_comparison(original, watermarked, attacked, attack_name, output_dir):
-    """Save comparison image."""
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    
-    images = [(original, 'Original'), (watermarked, 'Watermarked'), 
-              (attacked, f'After {attack_name}')]
-    
-    for ax, (img, title) in zip(axes, images):
-        ax.imshow(img, cmap='gray')
-        ax.set_title(title)
-        ax.axis('off')
-    
-    plt.tight_layout()
-    filename = attack_name.replace(' ', '_').replace('(', '').replace(')', '').replace('=', '')
-    plt.savefig(os.path.join(output_dir, f"comparison_{filename}.png"), dpi=150, bbox_inches='tight')
-    plt.close(fig)
-
-
-# ============================================================================
-# Main
-# ============================================================================
+    for attack_name, attack_func in attack_config.items():
+        low, high = 0.0, 1.0
+        best_param, best_wpsnr = None, -np.inf
+        
+        for _ in range(iterations):
+            mid = (low + high) / 2
+            # converged
+            if abs(high - low) < 1e-6:
+                break
+            
+            try:
+                full_attacked_img = attack_func(watermarked.copy(), mid)
+                attacked_img = np.where(mask, full_attacked_img, watermarked)
+                detected, wpsnr_val = detection(original, watermarked, attacked_img, Uwm, Vwm)
+                actual_param = param_converters[attack_name](mid)
+                # print(f"{attack_name} det:{detected} WPSNR:{wpsnr_val:.2f}dB x:{mid:.4f} par:{actual_param}")
+                
+                if not detected:
+                    best_param, best_wpsnr = mid, wpsnr_val
+                    high = mid
+                else:
+                    low = mid
+                    
+            except Exception as e:
+                print(f"Error during {attack_name} with param {mid}: {e}")
+                break
+        
+        if best_param is not None:
+            actual_param = param_converters[attack_name](mid)
+            print(f"  ✓ {attack_name}: Optimal param = {actual_param:.4f} | WPSNR: {best_wpsnr:.2f} dB")
+            results.append({'Attack': attack_name, 'Best_Parameter': actual_param, 'WPSNR': best_wpsnr, 'Status': 'Removed'})
+        else:
+            print(f"  ✗ {attack_name}: Could not remove watermark")
+            results.append({'Attack': attack_name, 'Best_Parameter': np.nan, 'WPSNR': np.nan, 'Status': 'Not Removed'})
+    return pd.DataFrame(results)
 
 def main():
-    """Main function."""
-    config = Config()
-    
+    print("===============================================")
+    print("CrispyMcMark Attack Suite")
+    print("===============================================")
+
     # Setup output directory
-    if config.save_images:
-        os.makedirs(config.output_dir, exist_ok=True)
-        print(f"Saving images to: {config.output_dir}\n")
-    
-    # Generate watermark if needed
-    if not os.path.exists(config.mark_path):
-        mark = np.random.uniform(0.0, 1.0, config.mark_size)
-        mark = np.uint8(np.rint(mark))
-        np.save(config.mark_path, mark)
+    os.makedirs(output_dir, exist_ok=True)
+
+    # TODO: hardcode Uwm and Vwm inside the detection func
+    _, _, Uwm, Vwm = embedding("./challenge_images/0002.bmp", mark_path, alpha)
+
+    # TODO: remove
+    # generate an image to simulate having images to attack: to use put an image (exs. 0002.bmp) inside the challenge_images folder
+    # and then update the paths below to generate a corresponding watermarked image
+    if len(os.listdir(input_dir)) == 0:
+        watermarked, watermark, Uwm, Vwm = embedding("./challenge_images/0002.bmp", mark_path, alpha)
+        watermarked = watermarked.astype(np.uint8)
+        cv2.imwrite("./watermarked_groups_images/cryspymcmark_0002.bmp", watermarked)
     
     # Load image
-    filename = sorted(os.listdir(config.images_path))[config.image_index]
-    image_path = os.path.join(config.images_path, filename)
-    original = cv2.imread(image_path, 0)
-    print(f"Testing image: {filename}")
-    print(f"Alpha: {config.alpha}\n")
+    for filename in sorted(os.listdir(input_dir)): 
+        image_path = os.path.join(input_dir, filename)
+
+        # expected image name is groupName_imageName.bmp
+        group_name, image_name = os.path.splitext(filename)[0].split('_')
+
+        watermarked = cv2.imread(image_path, 0)
+        print(f"Attacking image: {image_name}")
+        print(f"of group: {group_name}")
+
+        # find out which is the original challenge image to compare to
+        original_path = os.path.join(originals_dir, image_name + ".bmp")
+        original = cv2.imread(original_path, 0)
     
-    # Embed watermark
-    print("Embedding watermark...")
-    watermarked, watermark, Uwm, Vwm = embedding(image_path, config.mark_path, config.alpha)
-    watermarked = watermarked.astype(np.uint8)
-    
-    # Save base images
-    if config.save_images:
-        cv2.imwrite(os.path.join(config.output_dir, "original.png"), original)
-        cv2.imwrite(os.path.join(config.output_dir, "watermarked.png"), watermarked)
-    
-    # Compute threshold
-    threshold, _ = compute_threshold(config.mark_size, watermark, N=1000)
-    
-    # Print quality metrics
-    psnr = cv2.PSNR(original, watermarked)
-    wpsnr_val = wpsnr(original, watermarked)
-    print(f"\nWatermark Quality:")
-    print(f"  PSNR:  {psnr:6.2f} dB")
-    print(f"  WPSNR: {wpsnr_val:6.2f} dB")
-    print(f"\nDetection Threshold: {threshold:.4f}\n")
-    
-    # Show images
-    show_images(original, watermarked)
-    
-    # Test clean detection
-    extracted_clean = detection(original, watermarked, watermarked, Uwm, Vwm, config.alpha)
-    sim_clean = similarity(watermark, extracted_clean)
-    print(f"Clean watermarked similarity: {sim_clean:.4f} (should be ~1.0)\n")
-    
-    # Run attacks
-    print("=" * 60)
-    print(f"{'ATTACK RESULTS':^60}")
-    print("=" * 60 + "\n")
-    
-    attacks = get_attacks()
-    detected_count = 0
-    
-    for attack_name, attack_func in attacks:
-        # Apply attack
-        attacked = attack_func(watermarked)
+        # Print quality metrics
+        wpsnr_val = wpsnr(original, watermarked)
+        print(f"\nWatermark Quality:")
+        print(f"  WPSNR: {wpsnr_val:6.2f} dB")
+
+        print("binary search with no mask...")
+        mask = original >= 0 
+        res = bin_search_attack(original,watermarked,detection,Uwm,Vwm,mask)
+
+        print("binary search with edges mask...")
+        emask = edges_mask(original) 
+        res = bin_search_attack(original,watermarked,detection,Uwm,Vwm,emask)
+
+        print("binary search with noisy mask...")
+        nmask = noisy_mask(original) 
+        res = bin_search_attack(original,watermarked,detection,Uwm,Vwm,nmask)
+
+        # df = pd.DataFrame(res)
+        # df.plot.bar(x='Attack', y='WPSNR', color=df['Status'].map({'Removed': 'green', 'Not Removed': 'red'}))
+        # plt.ylabel('WPSNR (dB)')
+        # plt.title('Attack Effectiveness')
+        # plt.xticks(rotation=45)
+        # plt.tight_layout()
+        # plt.show()
+         
+        # TODO: find best attack and save it in output
         
-        # Measure quality
-        psnr_att = cv2.PSNR(watermarked, attacked)
-        wpsnr_att = wpsnr(watermarked, attacked)
-        
-        # Detect watermark
-        extracted = detection(original, watermarked, attacked, Uwm, Vwm, config.alpha)
-        sim = similarity(watermark, extracted)
-        detected = sim > threshold
-        
-        # Save comparison
-        if config.save_images:
-            save_comparison(original, watermarked, attacked, attack_name, config.output_dir)
-            clean_name = attack_name.replace(' ', '_').replace('(', '').replace(')', '').replace('=', '')
-            cv2.imwrite(os.path.join(config.output_dir, f"attacked_{clean_name}.png"), attacked)
-        
-        # Print results
-        icon = "✓" if detected else "✗"
-        status = "DETECTED" if detected else "NOT DETECTED"
-        print(f"{attack_name:20s} {icon}")
-        print(f"  PSNR:       {psnr_att:6.2f} dB")
-        print(f"  WPSNR:      {wpsnr_att:6.2f} dB")
-        print(f"  Similarity: {sim:6.4f} (threshold: {threshold:.4f})")
-        print(f"  Status:     {status}\n")
-        
-        if detected:
-            detected_count += 1
-    
-    # Print summary
-    total = len(attacks)
-    rate = (detected_count / total) * 100
-    
-    print("=" * 60)
-    print(f"{'SUMMARY':^60}")
-    print("=" * 60)
-    print(f"Total Attacks: {total}")
-    print(f"Watermark Detected: {detected_count}/{total} ({rate:.1f}%)")
-    print(f"Watermark NOT Detected: {total - detected_count}/{total} ({100 - rate:.1f}%)")
-    
-    if config.save_images:
-        print(f"\nAll images saved to: {config.output_dir}/")
-    
-    print("=" * 60 + "\n")
+        # remove to run for all images
+        # TODO: add parallelization
+        return
 
 
 if __name__ == "__main__":
     main()
+
+
+    # combined_results = test_combined_attacks(
+    #     original=original,
+    #     watermarked=watermarked,
+    #     detection=detection,
+    #     Uwm=Uwm,
+    #     Vwm=Vwm,
+    #     output_dir=output_dir
+    # )
+    # # Access results
+    # best = combined_results['best_attack']
+    # df_all = combined_results['results_df']
+    # df_removed = combined_results['removed_df']
+# def test_combined_attacks(original, watermarked, detection, Uwm, Vwm, output_dir):
+#     """
+#     Test all possible pairs of attacks with different strength combinations.
+#     Find the attack with best WPSNR that still removes the watermark.
+#
+#     Args:
+#         original: Original image
+#         watermarked: Watermarked image
+#         detection: the group's detection function
+#         Uwm, Vwm: SVD components from embedding
+#         output_dir: Directory to save results
+#
+#     Returns:
+#         dict: Best attack configuration and results DataFrame
+#     """
+#
+#     # Get all category pairs
+#     category_names = list(attack_categories.keys())
+#     category_pairs = list(combinations(category_names, 2))
+#
+#     print(f"Testing {len(category_pairs)} attack category combinations...")
+#     print(f"Categories: {', '.join(category_names)}\n")
+#
+#     results = []
+#     best_attack = None
+#     best_wpsnr = -np.inf
+#
+#     # Test each category pair
+#     for cat1, cat2 in category_pairs:
+#         print(f"\nTesting {cat1} + {cat2} combinations...")
+#
+#         # Test all strength combinations for this category pair
+#         for attack1_name, attack1_func in attack_categories[cat1]:
+#             for attack2_name, attack2_func in attack_categories[cat2]:
+#                 # Apply attacks in sequence: attack1 -> attack2
+#                 try:
+#                     attacked = attack1_func(watermarked.copy())
+#                     attacked = attack2_func(attacked)
+#
+#                     detected, wpsnr_val = detection(original, watermarked, attacked, Uwm, Vwm)
+#
+#                     # Store result
+#                     combo_name = f"{attack1_name} + {attack2_name}"
+#                     result = {
+#                         'Attack_1': attack1_name,
+#                         'Attack_2': attack2_name,
+#                         'Combined_Name': combo_name,
+#                         'WPSNR': wpsnr_val,
+#                         'Detected': detected,
+#                         'Removed': not detected
+#                     }
+#                     results.append(result)
+#
+#                     # Check if this is the best attack that removes watermark
+#                     if not detected and wpsnr_val > best_wpsnr:
+#                         best_wpsnr = wpsnr_val
+#                         best_attack = {
+#                             'name': combo_name,
+#                             'attack1': (attack1_name, attack1_func),
+#                             'attack2': (attack2_name, attack2_func),
+#                             'wpsnr': wpsnr_val,
+#                             'image': attacked.copy()
+#                         }
+#
+#                     # Print progress for successful removals
+#                     if not detected:
+#                         print(f"  ✓ {combo_name:50s} WPSNR: {wpsnr_val:6.2f} dB (REMOVED)")
+#                     else:
+#                         print(f"  ✗ {combo_name:50s} WPSNR: {wpsnr_val:6.2f} dB (DETECTED)")
+#
+#                 except Exception as e:
+#                     print(f"  ✗ Error with {attack1_name} + {attack2_name}: {str(e)}")
+#                     continue
+#
+#     # Convert results to DataFrame
+#     df = pd.DataFrame(results)
+#
+#     # Sort by WPSNR (descending) for removed watermarks
+#     df_removed = df[df['Removed'] == True].sort_values('WPSNR', ascending=False)
+#     df_detected = df[df['Removed'] == False].sort_values('WPSNR', ascending=False)
+#
+#     # Print summary
+#     print("\n" + "=" * 80)
+#     print(f"{'COMBINED ATTACK RESULTS SUMMARY':^80}")
+#     print("=" * 80)
+#     print(f"\nTotal combinations tested: {len(results)}")
+#     print(f"Watermark removed: {len(df_removed)} ({len(df_removed)/len(results)*100:.1f}%)")
+#     print(f"Watermark survived: {len(df_detected)} ({len(df_detected)/len(results)*100:.1f}%)")
+#
+#     print(f"{'BEST ATTACK (Highest WPSNR that removes watermark)':^80}")
+#     print("=" * 80)
+#     if best_attack:
+#         print(f"Attack: {best_attack['name']}")
+#         print(f"WPSNR:  {best_attack['wpsnr']:.2f} dB")
+#         print(f"Status: WATERMARK REMOVED ✓")
+#
+#         # Save best attack result
+#         if output_dir:
+#             os.makedirs(output_dir, exist_ok=True)
+#             best_path = os.path.join(output_dir, "best_combined_attack.png")
+#             cv2.imwrite(best_path, best_attack['image'])
+#             print(f"\nBest attack image saved to: {best_path}")
+#     else:
+#         print("\n⚠ Warning: No combined attack successfully removed the watermark!")
+#
+#     return {
+#         'best_attack': best_attack,
+#         'results_df': df,
+#         'removed_df': df_removed,
+#         'detected_df': df_detected
+#     }
