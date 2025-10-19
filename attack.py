@@ -13,6 +13,7 @@ from detection import (
     extraction,
     similarity,
     compute_threshold,
+    verify_watermark_extraction,
 )
 from wpsnr import wpsnr
 import pandas as pd
@@ -23,7 +24,7 @@ from utilities import edges_mask, noisy_mask
 
 # Configuration
 # images_path = "./images"
-alpha = 0.00029
+alpha = 0.001
 mark_size = 1024
 mark_path = "./mark.npy"
 input_dir = "./watermarked_groups_images/"
@@ -54,13 +55,17 @@ attack_config = {
 }
 
 
+
+
+
 # TODO: tweak iterations to find balance between speed and accuracy
-def bin_search_attack(original, watermarked, detection, Uwm, Vwm, mask, iterations=6):
+def bin_search_attack(original, watermarked, detection, Uwm, Vwm, mask, alpha, mark_path, dwt_level=3, iterations=6):
     results = []
 
     for attack_name, attack_func in attack_config.items():
         low, high = 0.0, 1.0
         best_param, best_wpsnr = None, -np.inf
+        best_attacked = None
 
         for _ in range(iterations):
             mid = (low + high) / 2
@@ -72,7 +77,7 @@ def bin_search_attack(original, watermarked, detection, Uwm, Vwm, mask, iteratio
                 full_attacked_img = attack_func(watermarked.copy(), mid)
                 attacked_img = np.where(mask, full_attacked_img, watermarked)
                 detected, wpsnr_val = detection(
-                    original, watermarked, attacked_img, Uwm, Vwm
+                    original, watermarked, attacked_img, Uwm, Vwm, alpha=alpha, dwt_level=dwt_level
                 )
                 actual_param = param_converters[attack_name](mid)
                 # print(
@@ -81,6 +86,7 @@ def bin_search_attack(original, watermarked, detection, Uwm, Vwm, mask, iteratio
 
                 if not detected:
                     best_param, best_wpsnr = mid, wpsnr_val
+                    best_attacked = attacked_img.copy()
                     high = mid
                 else:
                     low = mid
@@ -90,7 +96,13 @@ def bin_search_attack(original, watermarked, detection, Uwm, Vwm, mask, iteratio
                 break
 
         if best_param is not None:
-            actual_param = param_converters[attack_name](mid)
+            actual_param = param_converters[attack_name](best_param)
+            
+            # Verify watermark extraction after attack
+            original_watermark = np.load(mark_path)
+            extracted_after_attack = extraction(original, best_attacked, Uwm, Vwm, alpha=alpha, dwt_level=dwt_level)
+            sim_after_attack = similarity(original_watermark, extracted_after_attack)
+            
             print(
                 f"  ✓ {attack_name}: Optimal param = {actual_param:.4f} | WPSNR: {best_wpsnr:.2f} dB"
             )
@@ -99,6 +111,7 @@ def bin_search_attack(original, watermarked, detection, Uwm, Vwm, mask, iteratio
                     "Attack": attack_name,
                     "Best_Parameter": actual_param,
                     "WPSNR": best_wpsnr,
+                    "Similarity": sim_after_attack,
                     "Status": "Removed",
                 }
             )
@@ -109,6 +122,7 @@ def bin_search_attack(original, watermarked, detection, Uwm, Vwm, mask, iteratio
                     "Attack": attack_name,
                     "Best_Parameter": np.nan,
                     "WPSNR": np.nan,
+                    "Similarity": np.nan,
                     "Status": "Not Removed",
                 }
             )
@@ -126,14 +140,14 @@ def main():
     os.makedirs(originals_dir, exist_ok=True)
 
     # TODO: hardcode Uwm and Vwm inside the detection func
-    _, _, Uwm, Vwm = embedding("./challenge_images/0002.bmp", mark_path, alpha)
+    _, _, Uwm, Vwm = embedding("./challenge_images/0002.bmp", mark_path, alpha, dwt_level=3)
 
     # TODO: remove
     # generate an image to simulate having images to attack: to use put an image (exs. 0002.bmp) inside the challenge_images folder
     # and then update the paths below to generate a corresponding watermarked image
     if len(os.listdir(input_dir)) == 0:
         watermarked, watermark, Uwm, Vwm = embedding(
-            "./challenge_images/0002.bmp", mark_path, alpha
+            "./challenge_images/0002.bmp", mark_path, alpha, dwt_level=3
         )
         watermarked = watermarked.astype(np.uint8)
         cv2.imwrite("./watermarked_groups_images/cryspymcmark_0002.bmp", watermarked)
@@ -146,8 +160,8 @@ def main():
         group_name, image_name = os.path.splitext(filename)[0].split("_")
 
         watermarked = cv2.imread(image_path, 0)
-        print(f"Attacking image: {image_name}")
-        print(f"of group: {group_name}")
+        print(f"\nAttacking image: {image_name}")
+        print(f"Group: {group_name}")
 
         # find out which is the original challenge image to compare to
         original_path = os.path.join(originals_dir, image_name + ".bmp")
@@ -158,15 +172,29 @@ def main():
         print(f"\nWatermark Quality:")
         print(f"  WPSNR: {wpsnr_val:6.2f} dB")
 
-        print("binary search with no mask...")
+        # VERIFY WATERMARK EXTRACTION FIRST
+        extraction_results = verify_watermark_extraction(
+            original, watermarked, Uwm, Vwm, alpha, mark_path, 
+            output_prefix=f"{group_name}_{image_name}_",
+            dwt_level=3
+        )
+        
+        if extraction_results['similarity'] < 0.7:
+            print("\n[WARNING] Watermark extraction is not working properly!")
+            print("  Skipping attacks as detection may not be reliable.")
+            continue
+
+        print("\nBinary search with no mask...")
         mask = original >= 0
-        res = bin_search_attack(original, watermarked, detection, Uwm, Vwm, mask)
+        res = bin_search_attack(original, watermarked, detection, Uwm, Vwm, mask, alpha, mark_path, dwt_level=3)
+        print(f"\nResults:\n{res.to_string()}\n")
 
-        print("binary search with edges mask...")
+        print("Binary search with edges mask...")
         emask = edges_mask(original)
-        res = bin_search_attack(original, watermarked, detection, Uwm, Vwm, emask)
+        res = bin_search_attack(original, watermarked, detection, Uwm, Vwm, emask, alpha, mark_path, dwt_level=3)
+        print(f"\nResults:\n{res.to_string()}\n")
 
-        print("binary search with noisy mask...")
+        print("Binary search with noisy mask...")
         nmask = noisy_mask(original)
         res = bin_search_attack(original, watermarked, detection, Uwm, Vwm, nmask)
 
