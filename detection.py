@@ -6,10 +6,10 @@ from wpsnr import wpsnr
 from matplotlib import pyplot as plt
 
 
-def detection(original, watermarked, attacked, Uw, Vw, alpha=0.05, dwt_level=2):
+def detection(original, watermarked, attacked, Uw, Vw, alpha, beta):
     """Detect watermark in attacked image."""
-    extracted_wm = extraction(original, attacked, Uw, Vw, alpha=alpha, dwt_level=dwt_level)
-    original_wm = extraction(original, watermarked, Uw, Vw, alpha=alpha, dwt_level=dwt_level)
+    extracted_wm = extraction(original, attacked, Uw, Vw, alpha=alpha, beta=beta)
+    original_wm = extraction(original, watermarked, Uw, Vw, alpha=alpha, beta=beta)
 
     # Measure quality
     wpsnr_attack = wpsnr(watermarked, attacked)
@@ -23,41 +23,60 @@ def detection(original, watermarked, attacked, Uw, Vw, alpha=0.05, dwt_level=2):
     return detected, wpsnr_attack
 
 
-def extraction(original, watermarked, Uw, Vw, alpha=0.05, type="multiplicative", dwt_level=2):
-    """Extract watermark from watermarked image."""
-
+def extraction(original, watermarked, Uw, Vw, alpha, beta, type="additive"):
+    """
+    Extract watermark from watermarked image.
+    
+    Args:
+        original: Original image
+        watermarked: Watermarked/attacked image
+        Uw, Vw: SVD components of watermark
+        alpha: Embedding strength for LH and HL subbands
+        beta: Embedding strength for LL subband
+        type: Embedding type ("multiplicative" or additive)
+    """
     # Multi-level DWT decomposition
-    coeffs_original = pywt.wavedec2(original, wavelet="haar", level=dwt_level)
-    coeffs_watermarked = pywt.wavedec2(watermarked, wavelet="haar", level=dwt_level)
+    coeffs_original = pywt.dwt2(original, wavelet="haar")
+    coeffs_watermarked = pywt.dwt2(watermarked, wavelet="haar")
 
-    LLi = coeffs_original[0]  # Deepest LL from original
-    LLa = coeffs_watermarked[0]  # Deepest LL from watermarked/attacked
+    LLi, (LHi, HLi, _) = coeffs_original  
+    LLa, (LHa, HLa, _) = coeffs_watermarked 
 
-    # Apply DCT to LL subbands (CRITICAL: must match embedding!)
-    LLi_dct = dct(dct(LLi, axis=0, norm='ortho'), axis=1, norm='ortho')
-    LLa_dct = dct(dct(LLa, axis=0, norm='ortho'), axis=1, norm='ortho')
-
-    # SVD on DCT-transformed LL subbands
-    Ui, Si, Vi = np.linalg.svd(LLi_dct)
-    Ua, Sa, Va = np.linalg.svd(LLa_dct)
-
-    # Extract watermark singular values
-    # Embedding formula: S_new = Si + alpha * Si * Swm (multiplicative)
-    # Therefore: Swm = (S_new - Si) / (alpha * Si)
+    # SVD on LL, LH and HL subbands
+    _, Si_LL, _ = np.linalg.svd(LLi)
+    _, Sa_LL, _ = np.linalg.svd(LLa)
+    _, Si_LH, _ = np.linalg.svd(LHi)
+    _, Sa_LH, _ = np.linalg.svd(LHa)
+    _, Si_HL, _ = np.linalg.svd(HLi)
+    _, Sa_HL, _ = np.linalg.svd(HLa)
 
     # Use the size of Uw/Vw to determine watermark dimensions
-    watermark_sv_count = min(Uw.shape[1], Vw.shape[0])
+    num_watermark_values = min(Uw.shape[1], Vw.shape[0])
 
-    # Extract using the inverse of embedding formula
+    # Extract from LL, LH and HL with appropriate alpha/beta values
     if type == "multiplicative":
         epsilon = 1e-10  # small constant to avoid division by zero
-        Sw = (Sa[:watermark_sv_count] - Si[:watermark_sv_count]) / (
-            alpha * Si[:watermark_sv_count] + epsilon
-        )
+        # LL with beta
+        diff_LL = Sa_LL[:num_watermark_values] - Si_LL[:num_watermark_values]
+        Sw_LL = diff_LL / (beta * Si_LL[:num_watermark_values] + epsilon)
+        
+        # LH with alpha
+        diff_LH = Sa_LH[:num_watermark_values] - Si_LH[:num_watermark_values]
+        Sw_LH = diff_LH / (alpha * Si_LH[:num_watermark_values] + epsilon)
+        
+        # HL with alpha
+        diff_HL = Sa_HL[:num_watermark_values] - Si_HL[:num_watermark_values]
+        Sw_HL = diff_HL / (alpha * Si_HL[:num_watermark_values] + epsilon)
     else:
-        # Additive formula: S_new = Si + alpha * Swm
-        # Therefore: Swm = (S_new - Si) / alpha
-        Sw = (Sa[:watermark_sv_count] - Si[:watermark_sv_count]) / alpha
+        # LL with beta
+        Sw_LL = (Sa_LL[:num_watermark_values] - Si_LL[:num_watermark_values]) / beta
+        # LH with alpha
+        Sw_LH = (Sa_LH[:num_watermark_values] - Si_LH[:num_watermark_values]) / alpha
+        # HL with alpha
+        Sw_HL = (Sa_HL[:num_watermark_values] - Si_HL[:num_watermark_values]) / alpha
+
+    # Average the extracted singular values from all three subbands
+    Sw = (Sw_LL + Sw_LH + Sw_HL) / 3
 
     # Recompose watermark from singular values
     extracted_watermark = Uw.dot(np.diag(Sw)).dot(Vw)
@@ -107,7 +126,8 @@ def compute_threshold(mark_size, w, N=1000):
 
     return T, SIMs
 
-def verify_watermark_extraction(original, watermarked, Uwm, Vwm, alpha, mark_path, output_prefix="", dwt_level=3):
+
+def verify_watermark_extraction(original, watermarked, Uwm, Vwm, alpha, beta, mark_path, output_prefix=""):
     """Verify that the embedded watermark can be correctly extracted."""
     print("\n" + "=" * 80)
     print("WATERMARK EXTRACTION VERIFICATION")
@@ -117,7 +137,7 @@ def verify_watermark_extraction(original, watermarked, Uwm, Vwm, alpha, mark_pat
     original_watermark = np.load(mark_path)
     
     # Extract watermark from watermarked image (no attack)
-    extracted_watermark = extraction(original, watermarked, Uwm, Vwm, alpha=alpha, dwt_level=dwt_level)
+    extracted_watermark = extraction(original, watermarked, Uwm, Vwm, alpha=alpha, beta=beta)
     
     # Compute similarity
     sim = similarity(original_watermark, extracted_watermark)
@@ -255,8 +275,8 @@ def verify_watermark_extraction(original, watermarked, Uwm, Vwm, alpha, mark_pat
     False Neg:     {orig_one_ext_zero:4d}
 
     PARAMETERS
-    Alpha:           {alpha:.6f}
-    DWT Level:       {dwt_level}
+    Alpha (LH/HL):   {alpha:.2f}
+    Beta (LL):       {beta:.2f}
 
     STATUS:          {status}
 """
