@@ -211,3 +211,4 @@ __marimo__/
 attacked_groups_images/*
 watermarked_groups_images/*
 challenge_images/*
+*.png
