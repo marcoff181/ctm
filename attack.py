@@ -49,6 +49,7 @@ detection_functions = {
 # TODO: tweak iterations to find balance between speed and accuracy
 def bin_search_attack(original, watermarked, detection, mask, iterations):
     results = []
+    best_attacks = []
 
     for attack_name, attack_func in attack_config.items():
         low, high = 0.0, 1.0
@@ -74,6 +75,10 @@ def bin_search_attack(original, watermarked, detection, mask, iterations):
             else:
                 low = mid
 
+        if best_attacked is not None:
+            best_attacks.append(best_attacked)
+
+
         if best_param is not None:
             actual_param = param_converters[attack_name](best_param)
             print(
@@ -97,6 +102,8 @@ def bin_search_attack(original, watermarked, detection, mask, iterations):
                     "Status": "Not Removed",
                 }
             )
+    return best_attacks
+
     return pd.DataFrame(results)
 
 # def double_bin_search_attack(original, watermarked, detection, mask, iterations):
@@ -197,12 +204,12 @@ def full_attack(detection_functions):
         print("\nBinary search with no mask...")
         mask = original >= 0
         res = bin_search_attack(original, watermarked, det_fun, mask, bin_search_iterations)
-        print(f"\nResults:\n{res.to_string()}\n")
+        # print(f"\nResults:\n{res}\n")
 
         print("Binary search with edges mask...")
         emask = edges_mask(original)
         res = bin_search_attack(original, watermarked, det_fun, emask, bin_search_iterations)
-        print(f"\nResults:\n{res.to_string()}\n")
+        # print(f"\nResults:\n{res}\n")
 
         print("Binary search with noisy mask...")
         nmask = noisy_mask(original)
