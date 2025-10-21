@@ -152,11 +152,11 @@ def select_best_blocks(original_image, attacked_image, n_blocks,  block_size):
     selected_blocks_tmp = sorted(selected_blocks_tmp, key=lambda k: k['merit'], reverse=True)
 
     selected_blocks = []
-    for i in range(BLOCKS_TO_EMBED):
+    for i in range(n_blocks):
         tmp = selected_blocks_tmp.pop()
         selected_blocks.append(tmp)
         attacked_image[tmp['locations'][0]:tmp['locations'][0] + BLOCK_SIZE,
-                        tmp['locations'][0]:tmp['locations'][1] + BLOCK_SIZE] = 1
+                        tmp['locations'][1]:tmp['locations'][1] + BLOCK_SIZE] = 1
         
     selected_blocks = sorted(selected_blocks, key=lambda k: k['locations'], reverse=False)
 
@@ -164,83 +164,69 @@ def select_best_blocks(original_image, attacked_image, n_blocks,  block_size):
 
 
 def embedding(original_image_path, watermark_path, alpha, dwt_level):
-    """
-    Embed watermark by distributing singular values across blocks using additive embedding.
+    """Embed watermark using DWT-SVD with block selection."""
     
-    Strategy: Each block embeds a slice of the watermark's singular values.
-    For 32x32 watermark and 32 blocks with 4x4 size:
-    - Each 4x4 block -> 2x2 LL after 1-level DWT
-    - Each LL has 2 singular values
-    - Embed watermark S values: block_i gets Swm[i*2:(i+1)*2]
-    Add 1 to selected blocks for some
-    Args:
-        original_image_path: Path to original image
-        watermark_path: Path to watermark file
-        alpha: Embedding strength for LL subband
-        dwt_level: DWT decomposition level (should be 1 for 4x4 blocks)
-    
-    Returns:
-        tuple: (watermarked_image, watermark, Uwm, Vwm)
-    """
     # Load image and watermark
     image = cv2.imread(original_image_path, 0)
     watermark, Uwm, Swm, Vwm = get_watermark_svd(watermark_path)
     
     start = time.time()
 
+    # Compute attack resistance map (DO NOT modify it later!)
     attacked_image = attack_image(image)
 
-    # After 1-level DWT on 4x4 block, we get 2x2 LL
-    # 2x2 LL gives us 2 singular values
-    # So 32 blocks × 2 values/block = 64 positions (we use first 32)
-    
-    # Select best blocks based on edge content
+    # Select best blocks
     selected_blocks = select_best_blocks(image, attacked_image, BLOCKS_TO_EMBED, BLOCK_SIZE)
 
     n_blocks_in_image = image.shape[0] / BLOCK_SIZE
-
-    shape_LL_tmp = np.floor(image.shape[0] / (2*n_blocks_in_image)).astype(np.uint8) # try to keep float64
+    shape_LL_tmp = np.uint8(np.floor(image.shape[0] / (2*n_blocks_in_image))) 
     
-    # Create a copy of the image for watermarking
+    # Create copies
     watermarked_image = image.astype(np.float64)
+    binary_mask = np.zeros_like(image, dtype=np.float64)
 
+    # Embed watermark
     for i in range(len(selected_blocks)):
         x = selected_blocks[i]['locations'][0]
         y = selected_blocks[i]['locations'][1]
 
-        # get the block from the original image
         block_original = image[x:x + BLOCK_SIZE, y:y + BLOCK_SIZE]
-        # compute the LL of the block
         coeffs = pywt.wavedec2(block_original, wavelet='haar', level=1)
         LL_tmp = coeffs[0]
-        # apply SVD
         Ui, Si, Vi = np.linalg.svd(LL_tmp)
         Sw = Si.copy()
 
-        # Additive Embedding (Linear combination)
-        Sw = Sw + Swm[(i*shape_LL_tmp)%32: (shape_LL_tmp+(i*shape_LL_tmp)%32)] * alpha
+        # Fixed indexing without modulo
+        start_idx = i * shape_LL_tmp
+        end_idx = start_idx + shape_LL_tmp
+        
+        if end_idx <= len(Swm):
+            Sw += Swm[start_idx:end_idx] * alpha
+            LL_new = (Ui).dot(np.diag(Sw)).dot(Vi)
+            coeffs[0] = LL_new
+            block_new = pywt.waverec2(coeffs, wavelet='haar')
+            watermarked_image[x:x + BLOCK_SIZE, y:y + BLOCK_SIZE] = block_new
+            
+            # Mark in binary mask
+            binary_mask[x:x + BLOCK_SIZE, y:y + BLOCK_SIZE] = 1
 
-        LL_new = np.zeros((shape_LL_tmp, shape_LL_tmp))
-        LL_new = (Ui).dot(np.diag(Sw)).dot(Vi)
-
-        # compute the new block
-        coeffs[0] = LL_new
-        block_new = pywt.waverec2(coeffs, wavelet='haar')
-        # replace the block in the original image
-        watermarked_image[x:x + BLOCK_SIZE, y:y + BLOCK_SIZE] = block_new
-
-    
     watermarked_image = watermarked_image.astype(np.uint8)
 
-    difference = (-watermarked_image + image) * attacked_image.astype(np.uint8)
-    watermarked_image = image + difference + attacked_image.astype(np.uint8)
+    # Apply correction using BINARY MASK (not attack accumulation)
+    difference = (-watermarked_image + image) * binary_mask.astype(np.uint8)
+    watermarked_image = image + difference
+    watermarked_image += binary_mask.astype(np.uint8)
 
     end = time.time()
-        
-    #compute the quality and timings
-    w = wpsnr(image,watermarked_image)
+    
+    w = wpsnr(image, watermarked_image)
     print("[EMEDDING] wPSNR: %.2fdB" % w)
     print(f"[EMBEDDING] Time: {end - start:.2f}s")
     print(f"[EMBEDDING] Embedded in {len(selected_blocks)} blocks of size {BLOCK_SIZE}x{BLOCK_SIZE}")
+    
+    #plot watermarked image
+    # plt.title('Watermarked image')
+    # plt.imshow(watermarked_image, cmap='gray')
+    # plt.show()
     
     return watermarked_image, watermark, Uwm, Vwm

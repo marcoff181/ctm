@@ -19,6 +19,7 @@ from utilities import edges_mask, noisy_mask
 
 alpha = 20  # Embedding strength for LH and HL subbands
 beta = 30 # Embedding strength for LL subband (typically lower than alpha)
+MIN_WPSNR = 35.00
 
 # hardcoded stuff
 input_dir = "./watermarked_groups_images/"
@@ -74,7 +75,7 @@ def bin_search_attack(original, watermarked, detection, mask, alpha, beta, itera
                 detected, wpsnr_val = detection(original, watermarked, attacked_img)
                 actual_param = param_converters[attack_name](mid)
 
-                if not detected:
+                if not detected and wpsnr_val > MIN_WPSNR:
                     best_param, best_wpsnr = mid, wpsnr_val
                     best_attacked = attacked_img.copy()
                     high = mid

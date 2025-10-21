@@ -1,8 +1,9 @@
 import os
 import time
-import numpy as np
 import pywt
 import cv2
+import numpy as np
+import matplotlib.pyplot as plt  
 
 from wpsnr import wpsnr
 
@@ -12,6 +13,7 @@ ALPHA = 5.11
 BLOCKS_TO_EMBED = 32
 BLOCK_SIZE = 4
 WATERMARK_SIZE = 1024
+MIN_WPSNR = 35.00
 
 Uwm = np.array(
 [[-2.31267458e-01  ,5.73428696e-02 ,-2.26156433e-01  ,1.30579290e-01 ,-5.81210093e-03  ,1.38494753e-01  ,1.74246841e-01 ,-5.55574921e-02  ,7.71068824e-02  ,1.13620622e-01  ,2.03035610e-01  ,9.10635146e-02  ,2.08595775e-01 ,-2.42470021e-01 ,-1.11385100e-01 ,-2.07218918e-01  ,2.89637010e-01  ,3.66299869e-01 ,-7.33106387e-02  ,1.48494224e-01 ,-2.56492373e-01  ,2.16943705e-01  ,1.67666511e-03  ,8.70096585e-02 ,-2.01149970e-01 ,-1.89513387e-01 ,-2.40338304e-01 ,-1.15414849e-01  ,2.59539121e-01  ,1.20545652e-01 ,-8.00391995e-03  ,3.18239287e-02],
@@ -85,9 +87,14 @@ Vwm = np.array(
 
 def detection(input1, input2, input3):
 
-    original_image = cv2.imread(input1, 0).copy()
-    watermarked_image = cv2.imread(input2, 0).copy()
-    attacked_image = cv2.imread(input3, 0).copy()
+    if isinstance(input1, str):
+        original_image = cv2.imread(input1, 0).copy()
+        watermarked_image = cv2.imread(input2, 0).copy()
+        attacked_image = cv2.imread(input3, 0).copy()
+    else:
+        original_image = input1.copy()
+        watermarked_image = input2.copy()
+        attacked_image = input3.copy()
 
     # start time
     start = time.time()
@@ -111,23 +118,26 @@ def detection(input1, input2, input3):
 
     # Compute threshold (only once, can be cached)
     T, _ = compute_threshold(WATERMARK_SIZE, original_watermark, N=1000)
+    
+    end = time.time()
 
+    output2 = wpsnr(watermarked_image, attacked_image)
+    
     # Determine watermark status
-    watermark_status = 1 if sim > T else 0
+    watermark_status = 1 if sim > T and output2 > MIN_WPSNR else 0
     
     # Compute quality metric
-    output2 = wpsnr(watermarked_image, attacked_image)
 
-    end = time.time()
-    print(f'[DETECTION] Time: {end - start:.2f}s')
-    print(f'[DETECTION] Similarity: {sim:.4f}, Threshold: {T:.4f}')
-    print(f'[DETECTION] Status: {"DETECTED" if watermark_status else "NOT DETECTED"}')
-    print(f'[DETECTION] wPSNR: {output2:.2f} dB')
+
+    # print(f'[DETECTION] Time: {end - start:.2f}s')
+    # print(f'[DETECTION] Similarity: {sim:.4f}, Threshold: {T:.4f}')
+    # print(f'[DETECTION] Status: {"DETECTED" if watermark_status else "NOT DETECTED"}')
+    # print(f'[DETECTION] wPSNR: {output2:.2f} dB')
 
     return watermark_status, output2
 
 
-def identify_watermarked_blocks(original_image, watermarked_image, block_size):
+def identify_watermarked_blocks(original_image, watermarked_image, attacked_image, block_size):
     """
     Identify blocks where watermark was embedded by detecting modifications.
     
@@ -135,17 +145,18 @@ def identify_watermarked_blocks(original_image, watermarked_image, block_size):
         list of dicts with 'locations' key containing (x, y) tuples
     """
     blocks_with_watermark = []
-    difference = watermarked_image.astype(np.float64) - original_image.astype(np.float64)
+    difference = watermarked_image - original_image
+    binary_mask = np.float64(np.zeros((512, 512)))
 
     for i in range(0, original_image.shape[0], block_size):
         for j in range(0, original_image.shape[1], block_size):
             block_diff = difference[i:i + block_size, j:j + block_size]
-            
             # Block contains watermark if average difference is non-zero
-            if np.abs(np.mean(block_diff)) > 1e-6:
+            if np.mean(block_diff) > 0:
                 blocks_with_watermark.append({'locations': (i, j)})
+                binary_mask[i:i + block_size, j:j + block_size] = 1
 
-    return blocks_with_watermark
+    return blocks_with_watermark, binary_mask
 
 def extract_singular_values(original_image, attacked_image, blocks, block_size, alpha):
     """
@@ -163,21 +174,23 @@ def extract_singular_values(original_image, attacked_image, blocks, block_size, 
     """
     extracted_S = np.zeros(32)
     counts = np.zeros(32)
+    n_blocks_in_image = original_image.shape[0] / block_size
 
     for idx, block_info in enumerate(blocks):
         if idx >= 32:  # Only use first 32 blocks
             break
             
-        x, y = block_info['locations']
+        x = block_info['locations'][0]
+        y = block_info['locations'][1]
         
         # Extract from attacked image
-        block_attacked = attacked_image[x:x + block_size, y:y + block_size].astype(np.float64)
+        block_attacked = attacked_image[x:x + block_size, y:y + block_size]
         coeffs_attacked = pywt.wavedec2(block_attacked, wavelet='haar', level=1)
         LL_attacked = coeffs_attacked[0]
         _, S_attacked, _ = np.linalg.svd(LL_attacked)
         
         # Extract from original image
-        block_original = original_image[x:x + block_size, y:y + block_size].astype(np.float64)
+        block_original = original_image[x:x + block_size, y:y + block_size]
         coeffs_original = pywt.wavedec2(block_original, wavelet='haar', level=1)
         LL_original = coeffs_original[0]
         _, S_original, _ = np.linalg.svd(LL_original)
@@ -191,8 +204,9 @@ def extract_singular_values(original_image, attacked_image, blocks, block_size, 
         end_idx = start_idx + n_values
         
         if end_idx <= 32:
-            extracted_S[start_idx:end_idx] += S_diff
+            extracted_S[start_idx:end_idx] += abs(S_diff)
             counts[start_idx:end_idx] += 1
+
 
     # Average where multiple extractions occurred
     mask = counts > 0
@@ -203,14 +217,14 @@ def extract_singular_values(original_image, attacked_image, blocks, block_size, 
 
 def extraction(original_image, watermarked_image, attacked_image):
 
-    # start time
-    #start = time.time()
-
-    blocks_with_watermark = blocks_with_watermark = identify_watermarked_blocks(
+    blocks_with_watermark, binary_mask = identify_watermarked_blocks(
         original_image, 
         watermarked_image, 
+        attacked_image,
         BLOCK_SIZE
     )
+
+    attacked_image -= binary_mask.astype(np.uint8)
 
     # Extract singular values from each block
     extracted_S = extract_singular_values(
@@ -273,38 +287,180 @@ def compute_threshold(mark_size, w, N=1000):
     return T, SIMs
 
 
+
+
 def verify_watermark_extraction(original, watermarked, alpha, mark_path, dwt_level=1, output_prefix=""):
-    """
-    Verify watermark extraction (keeping original signature).
-    """
+    """Verify that the embedded watermark can be correctly extracted."""
     print("\n" + "=" * 80)
     print("WATERMARK EXTRACTION VERIFICATION")
     print("=" * 80)
     
+    # Load original watermark
     original_watermark = np.load(mark_path)
     
-    # Extract without attack
+    # Extract watermark from watermarked image (no attack)
     extracted_watermark = extraction(original, watermarked, watermarked)
     
+    # Compute similarity
     sim = similarity(original_watermark, extracted_watermark)
     
+    # Bit statistics
     total_bits = len(original_watermark)
     matching_bits = np.sum(original_watermark == extracted_watermark)
     differing_bits = total_bits - matching_bits
     
+    # Bit pattern analysis
+    both_zero = np.sum((original_watermark == 0) & (extracted_watermark == 0))
+    both_one = np.sum((original_watermark == 1) & (extracted_watermark == 1))
+    orig_one_ext_zero = np.sum((original_watermark == 1) & (extracted_watermark == 0))
+    orig_zero_ext_one = np.sum((original_watermark == 0) & (extracted_watermark == 1))
+    
     print(f"\nExtraction Statistics:")
     print(f"  Total bits:        {total_bits}")
     print(f"  Matching bits:     {matching_bits} ({matching_bits/total_bits*100:.2f}%)")
+    print(f"  Differing bits:    {differing_bits} ({differing_bits/total_bits*100:.2f}%)")
     print(f"  Similarity:        {sim:.4f}")
     
-    status = "EXCELLENT" if sim >= 0.95 else "GOOD" if sim >= 0.7 else "WARNING" if sim >= 0.5 else "ERROR"
-    print(f"\nExtraction Status: {status}")
+    print(f"\nBit Pattern Distribution:")
+    print(f"  Both 0:            {both_zero} ({both_zero/total_bits*100:.2f}%)")
+    print(f"  Both 1:            {both_one} ({both_one/total_bits*100:.2f}%)")
+    print(f"  Orig=1, Ext=0:     {orig_one_ext_zero} ({orig_one_ext_zero/total_bits*100:.2f}%)")
+    print(f"  Orig=0, Ext=1:     {orig_zero_ext_one} ({orig_zero_ext_one/total_bits*100:.2f}%)")
+    
+    # Hamming distance
+    hamming_dist = differing_bits
+    normalized_hamming = hamming_dist / total_bits
+    print(f"\nHamming Distance:  {hamming_dist}")
+    print(f"Normalized:        {normalized_hamming:.4f}")
+    
+    # Status
+    if sim >= 0.95:
+        status = "EXCELLENT"
+        status_symbol = "[OK]"
+        bbox_color = 'lightgreen'
+    elif sim >= 0.7:
+        status = "GOOD"
+        status_symbol = "[OK]"
+        bbox_color = 'lightblue'
+    elif sim >= 0.5:
+        status = "WARNING"
+        status_symbol = "[!]"
+        bbox_color = 'lightyellow'
+    else:
+        status = "ERROR"
+        status_symbol = "[X]"
+        bbox_color = 'lightcoral'
+    
+    print(f"\nExtraction Status: {status_symbol} {status}")
+    
+    # Prepare watermark visualizations
+    size = int(np.sqrt(total_bits))
+    wm_orig = original_watermark.reshape(size, size)
+    wm_extracted = extracted_watermark.reshape(size, size)
+    error_2d = (original_watermark != extracted_watermark).reshape(size, size).astype(float)
+    
+    # ========== PLOT 1: Overview (Watermarks + Images) ==========
+    fig1 = plt.figure(figsize=(18, 10))
+    gs1 = fig1.add_gridspec(2, 4, hspace=0.25, wspace=0.25)
+    
+    # Top row: Watermarks
+    ax1 = fig1.add_subplot(gs1[0, 0])
+    ax1.imshow(wm_orig, cmap='binary', vmin=0, vmax=1, interpolation='nearest')
+    ax1.set_title(f'Original Watermark\n{np.sum(original_watermark)} ones', fontsize=12, fontweight='bold')
+    ax1.axis('off')
+    
+    ax2 = fig1.add_subplot(gs1[0, 1])
+    ax2.imshow(wm_extracted, cmap='binary', vmin=0, vmax=1, interpolation='nearest')
+    ax2.set_title(f'Extracted Watermark\n{np.sum(extracted_watermark)} ones', fontsize=12, fontweight='bold')
+    ax2.axis('off')
+    
+    ax3 = fig1.add_subplot(gs1[0, 2])
+    im3 = ax3.imshow(error_2d, cmap='RdYlGn_r', interpolation='nearest', vmin=0, vmax=1)
+    ax3.set_title(f'Error Map\n{differing_bits} errors ({normalized_hamming*100:.1f}%)', fontsize=12, fontweight='bold')
+    ax3.axis('off')
+    cbar3 = plt.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04)
+    cbar3.set_label('Error', fontsize=10)
+    
+    # Confusion Matrix
+    ax4 = fig1.add_subplot(gs1[0, 3])
+    confusion = np.array([[both_zero, orig_zero_ext_one],
+                         [orig_one_ext_zero, both_one]])
+    im4 = ax4.imshow(confusion, cmap='Blues', aspect='auto')
+    ax4.set_xticks([0, 1])
+    ax4.set_yticks([0, 1])
+    ax4.set_xticklabels(['Extr: 0', 'Extr: 1'], fontsize=10)
+    ax4.set_yticklabels(['Orig: 0', 'Orig: 1'], fontsize=10)
+    ax4.set_title('Confusion Matrix', fontsize=12, fontweight='bold')
+    for i in range(2):
+        for j in range(2):
+            color = "white" if confusion[i, j] > confusion.max()/2 else "black"
+            ax4.text(j, i, f'{confusion[i, j]}\n({confusion[i, j]/total_bits*100:.1f}%)',
+                    ha="center", va="center", color=color, fontsize=10, fontweight='bold')
+    cbar4 = plt.colorbar(im4, ax=ax4, fraction=0.046, pad=0.04)
+    
+    # Bottom row: Images
+    ax5 = fig1.add_subplot(gs1[1, 0])
+    ax5.imshow(original, cmap='gray')
+    ax5.set_title('Original Image', fontsize=12, fontweight='bold')
+    ax5.axis('off')
+    
+    ax6 = fig1.add_subplot(gs1[1, 1])
+    ax6.imshow(watermarked, cmap='gray')
+    wpsnr_val = wpsnr(original, watermarked)
+    ax6.set_title(f'Watermarked Image\nWPSNR: {wpsnr_val:.2f} dB', fontsize=12, fontweight='bold')
+    ax6.axis('off')
+    
+    ax7 = fig1.add_subplot(gs1[1, 2])
+    diff_img = np.abs(watermarked.astype(float) - original.astype(float))
+    im7 = ax7.imshow(diff_img, cmap='hot')
+    ax7.set_title(f'Embedding Difference\nMax: {diff_img.max():.1f}', fontsize=12, fontweight='bold')
+    ax7.axis('off')
+    cbar7 = plt.colorbar(im7, ax=ax7, fraction=0.046, pad=0.04)
+    
+    # Statistics panel
+    ax8 = fig1.add_subplot(gs1[1, 3])
+    ax8.axis('off')
+    
+    stats_text = f"""QUALITY METRICS
+{'='*28}
+
+    Similarity:      {sim:.4f}
+    BER:             {normalized_hamming:.4f}
+    Hamming Dist:    {hamming_dist}
+
+    MATCHING BITS:   {matching_bits:4d}
+    Both 0:        {both_zero:4d}
+    Both 1:        {both_one:4d}
+
+    ERROR BITS:      {differing_bits:4d}
+    False Pos:     {orig_zero_ext_one:4d}
+    False Neg:     {orig_one_ext_zero:4d}
+
+    PARAMETERS
+    Alpha (LH/HL):   {alpha:.2f}
+
+    STATUS:          {status}
+"""
+    
+    ax8.text(0.05, 0.95, stats_text, transform=ax8.transAxes,
+             fontsize=10, verticalalignment='top', fontfamily='monospace',
+             bbox=dict(boxstyle='round', facecolor=bbox_color, alpha=0.4, edgecolor='black', linewidth=1.5))
+    
+    fig1.suptitle(f'Watermark Extraction Verification | Similarity: {sim:.4f} | Status: {status}', 
+                  fontsize=16, fontweight='bold', y=0.98)
+    
+    output_path1 = os.path.join("./", f"{output_prefix}extraction_overview.png")
+    plt.savefig(output_path1, dpi=200, bbox_inches='tight', facecolor='white', edgecolor='none')
+    print(f"\nSaved overview plot to: {output_path1}")
+    plt.close(fig1)
+    
     print("=" * 80 + "\n")
     
     return {
         'similarity': sim,
         'matching_bits': matching_bits,
         'differing_bits': differing_bits,
+        'hamming_distance': hamming_dist,
         'status': status,
         'original_watermark': original_watermark,
         'extracted_watermark': extracted_watermark
