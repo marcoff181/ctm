@@ -2,65 +2,246 @@ import numpy as np
 import cv2
 import pywt
 import time
+import os
+from matplotlib import pyplot as plt
+from scipy.ndimage.filters import gaussian_filter
+from scipy.signal import medfilt
 
+from wpsnr import wpsnr
+
+
+# embedded paramters:
+ALPHA = 5.11
+BLOCKS_TO_EMBED = 32
+BLOCK_SIZE = 4
+SPATIAL_WEIGHT = 0.33 # 0: no spatial domain, 1: only spatial domain
+ATTACK_WEIGHT = 1.0 - SPATIAL_WEIGHT
+BRIGHTNESS_THRESHOLD = 230
+DARKNESS_THRESHOLD = 10
 
 def get_watermark_svd(watermark_path):
     """Load watermark and compute its SVD decomposition."""
     watermark = np.load(watermark_path)
     watermark_matrix = watermark.reshape(32, 32)
-    U, S, V = np.linalg.svd(watermark_matrix)
+    U, S, V = np.linalg.svd(watermark_matrix, full_matrices=False)
     return watermark, U, S, V
 
+#------- DUE TO SLEF CONTAINED NATURE ------------------
+def jpeg_compression(img, QF):
+    cv2.imwrite('tmp.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), QF])
+    attacked = cv2.imread('tmp.jpg', 0)
+    os.remove('tmp.jpg')
+    return attacked
 
-# TODO: change signature to be (original_image_name?, watermark_name) -> watermarked image
-def embedding(original_image_path, watermark_path, alpha, beta):
+def blur(img, sigma):
+    attacked = gaussian_filter(img, sigma)
+    return attacked
+
+def awgn(img, std, seed):
+    mean = 0.0
+    # np.random.seed(seed)
+    attacked = img + np.random.normal(mean, std, img.shape)
+    attacked = np.clip(attacked, 0, 255)
+    return attacked
+
+def sharpening(img, sigma, alpha):
+    filter_blurred_f = gaussian_filter(img, sigma)
+    attacked = img + alpha * (img - filter_blurred_f)
+    return attacked
+
+def median(img, kernel_size):
+    attacked = medfilt(img, kernel_size)
+    return attacked
+
+def resizing(img, scale):
+  from skimage.transform import rescale
+  x, y = img.shape
+  attacked = rescale(img, scale)
+  attacked = rescale(attacked, 1/scale)
+  attacked = attacked[:x, :y]
+  return attacked
+
+#------- DUE TO SLEF CONTAINED NATURE ------------------
+
+
+def attack_image(original_image):
     """
-    Embed watermark by modifying singular values of LL, LH and HL subbands.
+    Intelligent attack phase: uses binary search to find the most effective attack parameters.
+    For each attack, finds the parameter that maximizes the difference while keeping the image valid.
+    Resizes attacked images back to original shape if needed.
+    """
+    blank_image = np.zeros_like(original_image, dtype=np.float64)
 
+    param_converters = {
+        "JPEG": lambda x: int(round((1 - x) * 100)),
+        "Blur": lambda x: x * 10,
+        "AWGN": lambda x: x * 50,
+        "Resize": lambda x: max(0.001, 0.5 ** (x * 10)),
+        "Median": lambda x: [1, 3, 5, 7][int(round(x * 3))],
+        "Sharp": lambda x: x * 3,
+    }
+
+    attack_config = {
+        "JPEG": lambda img, x: jpeg_compression(img, QF=param_converters["JPEG"](x)),
+        "Blur": lambda img, x: blur(img, sigma=param_converters["Blur"](x)),
+        "AWGN": lambda img, x: awgn(img, std=param_converters["AWGN"](x), seed=None),
+        "Resize": lambda img, x: resizing(img, scale=param_converters["Resize"](x)),
+        "Median": lambda img, x: median(img, kernel_size=param_converters["Median"](x)),
+        "Sharp": lambda img, x: sharpening(img, sigma=1.0, alpha=param_converters["Sharp"](x)),
+    }
+
+    start = time.time()
+    for attack_name, attack_func in attack_config.items():
+        low, high = 0.0, 1.0
+        best_param = 0.0
+        best_diff = -np.inf
+        iterations = 8
+        for _ in range(iterations):
+            mid = (low + high) / 2
+            try:
+                attacked = attack_func(original_image, mid)
+                # Resize if needed
+                if attacked.shape != original_image.shape:
+                    attacked = cv2.resize(attacked, (original_image.shape[1], original_image.shape[0]))
+                diff = np.sum(np.abs(attacked.astype(np.float64) - original_image))
+                if diff > best_diff:
+                    best_diff = diff
+                    best_param = mid
+                low = mid
+            except Exception as e:
+                print(f"[ATTACK] Error in {attack_name} with param {mid:.2f}: {e}")
+                break
+        # Apply best attack found
+        try:
+            attacked = attack_func(original_image, best_param)
+            if attacked.shape != original_image.shape:
+                attacked = cv2.resize(attacked, (original_image.shape[1], original_image.shape[0]))
+            blank_image += np.abs(attacked.astype(np.float64) - original_image)
+        except Exception as e:
+            print(f"[ATTACK] Final error in {attack_name} with param {best_param:.2f}: {e}")
+
+    end = time.time()
+    print(f"[EMBEDDING] Intelligent Attack Phase (binary search) duration: {end - start:.2f}s")
+
+    return blank_image
+
+def IsTooBrightorTooDark(block):
+    mean_val = np.mean(block)
+    return DARKNESS_THRESHOLD < mean_val < BRIGHTNESS_THRESHOLD
+
+def select_best_blocks(original_image, attacked_image, n_blocks,  block_size):
+    """
+    Select best blocks based on edge content.
+    
     Args:
-        original_image_path: Path to original image
-        watermark_path: Path to watermark file
-        alpha: Embedding strength for LH and HL subbands
-        beta: Embedding strength for LL subband
+        image: Input grayscale image
+        n_blocks: Number of blocks to select
+        block_size: Size of each block (4x4 for better LL subband size)
+    
+    Returns:
+        list: Locations (x, y) of selected blocks sorted by edge content
     """
+
+    selected_blocks_tmp = []
+
+    for i in range(0, original_image.shape[0], block_size):
+        for j in range(0, original_image.shape[1], block_size):
+            block = original_image[i:i + block_size, j:j + block_size]
+            if IsTooBrightorTooDark(block):
+                # choosen to average over all of the values inside the block
+                spatial_value = np.average(block)
+
+                block_tmp = {
+                    'locations': (i,j),
+                    'spatial_value': spatial_value,
+                    'attack_value': np.average(attacked_image[i:i + block_size, j:j + block_size])
+                }
+                selected_blocks_tmp.append(block_tmp)
+    
+    # 1. Sort all of the blocks based on the spatial value (average on brightness)
+    selected_blocks_tmp = sorted(selected_blocks_tmp, key=lambda k: k['spatial_value'], reverse=True)
+    # Normalize each block and score it based on the brightness value (the more the better)
+    for i in range(len(selected_blocks_tmp)):
+        selected_blocks_tmp[i]['merit'] = i*SPATIAL_WEIGHT
+    
+    # 2. We next want to sort them based on how much they where affected by the attacks, choosing the less affected
+    selected_blocks_tmp = sorted(selected_blocks_tmp, key=lambda k: k['attack_value'], reverse=False)
+    # we value more the one attacked less normalizing the result
+    for i in range(len(selected_blocks_tmp)):
+        selected_blocks_tmp[i]['merit'] += i*ATTACK_WEIGHT
+    
+    # 3. In the end we select the blocks with the highest merit
+    selected_blocks_tmp = sorted(selected_blocks_tmp, key=lambda k: k['merit'], reverse=True)
+
+    selected_blocks = []
+    for i in range(n_blocks):
+        tmp = selected_blocks_tmp.pop()
+        selected_blocks.append(tmp)
+        attacked_image[tmp['locations'][0]:tmp['locations'][0] + BLOCK_SIZE,
+                        tmp['locations'][1]:tmp['locations'][1] + BLOCK_SIZE] = 1
+        
+    selected_blocks = sorted(selected_blocks, key=lambda k: k['locations'], reverse=False)
+
+    return selected_blocks
+
+
+def embedding(original_image_path, watermark_path, alpha, dwt_level):
+    """Embed watermark using DWT-SVD with block selection."""
+    
     # Load image and watermark
     image = cv2.imread(original_image_path, 0)
-    watermark, _, Sw, _ = get_watermark_svd(watermark_path)
+    watermark, Uwm, Swm, Vwm = get_watermark_svd(watermark_path)
+    
+    start = time.time()
 
-    # Multi-level DWT decomposition
-    coeffs = pywt.dwt2(image, wavelet="haar")
+    # Compute attack resistance map
+    attacked_image = attack_image(image)
 
-    LL, (LH, HL, HH) = coeffs
+    # Select best blocks
+    selected_blocks = select_best_blocks(image, attacked_image, BLOCKS_TO_EMBED, BLOCK_SIZE)
 
-    # SVD on LL, LH and HL subbands
-    Ui_LL, Si_LL, Vi_LL = np.linalg.svd(LL)
-    Ui_LH, Si_LH, Vi_LH = np.linalg.svd(LH)
+    n_blocks_in_image = image.shape[0] / BLOCK_SIZE
+    shape_LL_tmp = np.uint8(np.floor(image.shape[0] / (2*n_blocks_in_image))) 
+    
+    # Prepare output images
+    watermarked_image = image.astype(np.float64)
+    binary_mask = np.zeros_like(image, dtype=np.float64)
 
-    # Embed watermark in singular values
-    S_new_LL = Si_LL.copy()
-    S_new_LH = Si_LH.copy()
-    num_watermark_values = len(Sw)
+    # Embed watermark in selected blocks
+    for idx, block_info in enumerate(selected_blocks):
+        block_x, block_y = block_info['locations']
+        block = image[block_x:block_x + BLOCK_SIZE, block_y:block_y + BLOCK_SIZE]
 
-    # LL with beta
-    S_new_LL[:num_watermark_values] = Si_LL[:num_watermark_values] + beta * Sw
-    # LH and HL with alpha
-    S_new_LH[:num_watermark_values] = Si_LH[:num_watermark_values] + alpha * Sw
+        # DWT and SVD
+        coeffs = pywt.wavedec2(block, wavelet='haar', level=1)
+        LL = coeffs[0]
+        U, S, V = np.linalg.svd(LL)
+        S_new = S.copy()
 
-    # Reconstruct subbands with SVD
-    LL = Ui_LL.dot(np.diag(S_new_LL)).dot(Vi_LL)
-    LH = Ui_LH.dot(np.diag(S_new_LH)).dot(Vi_LH)
+        # Watermark singular values for this block
+        wm_start = idx * shape_LL_tmp
+        wm_end = wm_start + shape_LL_tmp
 
-    # Replace all three subbands in the coefficient list
-    coeffs = LL, (LH, HL, HH)
+        if wm_end <= len(Swm):
+            S_new += Swm[wm_start:wm_end] * alpha
+            LL_new = U @ np.diag(S_new) @ V
+            coeffs[0] = LL_new
+            block_watermarked = pywt.waverec2(coeffs, wavelet='haar')
 
-    # Multi-level inverse DWT reconstruction
-    watermarked_image = pywt.idwt2(coeffs, wavelet="haar")
+            # Place watermarked block and update mask
+            watermarked_image[block_x:block_x + BLOCK_SIZE, block_y:block_y + BLOCK_SIZE] = block_watermarked
+            binary_mask[block_x:block_x + BLOCK_SIZE, block_y:block_y + BLOCK_SIZE] = 1
 
-    # Ensure same size as original
-    watermarked_image = watermarked_image[: image.shape[0], : image.shape[1]]
+    # Finalize watermarked image
+    watermarked_image = np.clip(watermarked_image, 0, 255).astype(np.uint8)
+    difference = (-watermarked_image + image) * binary_mask.astype(np.uint8)
+    watermarked_image = image + difference
+    watermarked_image += binary_mask.astype(np.uint8)
 
-    # Clip values to [0, 255] and convert to uint8
-    np.clip(watermarked_image, 0, 255, out=watermarked_image)
-    watermarked_image = watermarked_image.astype(np.uint8)
+    end = time.time()
+    w = wpsnr(image, watermarked_image)
+    print("[EMBEDDING] wPSNR: %.2fdB" % w)
+    print(f"[EMBEDDING] Time: {end - start:.2f}s")
+    print(f"[EMBEDDING] Embedded in {len(selected_blocks)} blocks of size {BLOCK_SIZE}x{BLOCK_SIZE}")
 
-    return watermarked_image, watermark
+    return watermarked_image, watermark, Uwm, Vwm

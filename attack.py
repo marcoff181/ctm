@@ -10,6 +10,8 @@ import pandas as pd
 from attack_functions import awgn, blur, sharpening, median, resizing, jpeg_compression
 from utilities import edges_mask, noisy_mask
 
+MIN_WPSNR = 35.00
+
 # hardcoded stuff
 input_dir = "./watermarked_groups_images/"
 output_dir = "./attacked_groups_images/"
@@ -65,7 +67,7 @@ def bin_search_attack(original, watermarked, detection, mask, iterations):
             detected, wpsnr_val = detection(original, watermarked, attacked_img)
             actual_param = param_converters[attack_name](mid)
 
-            if not detected:
+            if not detected and wpsnr_val > MIN_WPSNR:
                 best_param, best_wpsnr = mid, wpsnr_val
                 best_attacked = attacked_img.copy()
                 high = mid
