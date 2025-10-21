@@ -2191,7 +2191,6 @@ Vw = np.array(
     ]
 )
 
-
 # TODO: make signature become:
 # def detection(input1, input2, input3):
 # ’’’
@@ -2218,7 +2217,6 @@ def detection(original, watermarked, attacked, alpha, beta):
     detected = 1 if sim > 0.7 else 0
 
     return detected, wpsnr_attack
-
 
 def extraction(original, watermarked, alpha, beta):
     """

@@ -2,6 +2,9 @@ import os
 import cv2
 import numpy as np
 from detection import detection as crispy_detection
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
+from wpsnr import wpsnr
 
 import pandas as pd
 from attack_functions import awgn, blur, sharpening, median, resizing, jpeg_compression
@@ -13,14 +16,17 @@ output_dir = "./attacked_groups_images/"
 originals_dir = "./challenge_images/"
 attacked_wpsnr_lower_bound = 35
 
+# ciao :  Callable[[float], float] = lambda x: np.round(x * 512)/512
+
 # conversion between the input value 0.0..1.0 and the actual parameters of each attack function
 param_converters = {
     "JPEG": lambda x: int(round((1 - x) * 100)),
-    "Blur": lambda x: x * 10,
-    "AWGN": lambda x: x * 50,
-    "Resize": lambda x: max(0.001, 0.5 ** (x * 10)),
-    "Median": lambda x: [1, 3, 5, 7][int(round(x * 3))],
-    "Sharp": lambda x: x * 3,
+    "Blur": lambda x: x * 1.4,
+    "AWGN": lambda x: x * 30,
+    # pick closest number that is divisible by 512 so that when upscaling we come back to the same image size
+    "Resize": lambda x:  np.round(((1-x)+0.4) * 512)/512,
+    "Median": lambda x: [1, 3, 5][int(round(x * 2))],
+    "Sharp": lambda x: x * 0.1,
 }
 
 # attacks that take as input a strenght value `x` between 0.0 and 1.0
@@ -30,9 +36,7 @@ attack_config = {
     "AWGN": lambda img, x: awgn(img, std=param_converters["AWGN"](x)),
     "Resize": lambda img, x: resizing(img, scale=param_converters["Resize"](x)),
     "Median": lambda img, x: median(img, kernel_size=param_converters["Median"](x)),
-    "Sharp": lambda img, x: sharpening(
-        img, sigma=1.0, alpha=param_converters["Sharp"](x)
-    ),
+    "Sharp": lambda img, x: sharpening(img, sigma=1.0, alpha=param_converters["Sharp"](x)),
 }
 
 detection_functions = {
@@ -213,127 +217,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    # combined_results = test_combined_attacks(
-    #     original=original,
-    #     watermarked=watermarked,
-    #     detection=detection,
-    #     Uwm=Uwm,
-    #     Vwm=Vwm,
-    #     output_dir=output_dir
-    # )
-    # # Access results
-    # best = combined_results['best_attack']
-    # df_all = combined_results['results_df']
-    # df_removed = combined_results['removed_df']
-# def test_combined_attacks(original, watermarked, detection, Uwm, Vwm, output_dir):
-#     """
-#     Test all possible pairs of attacks with different strength combinations.
-#     Find the attack with best WPSNR that still removes the watermark.
-#
-#     Args:
-#         original: Original image
-#         watermarked: Watermarked image
-#         detection: the group's detection function
-#         Uwm, Vwm: SVD components from embedding
-#         output_dir: Directory to save results
-#
-#     Returns:
-#         dict: Best attack configuration and results DataFrame
-#     """
-#
-#     # Get all category pairs
-#     category_names = list(attack_categories.keys())
-#     category_pairs = list(combinations(category_names, 2))
-#
-#     print(f"Testing {len(category_pairs)} attack category combinations...")
-#     print(f"Categories: {', '.join(category_names)}\n")
-#
-#     results = []
-#     best_attack = None
-#     best_wpsnr = -np.inf
-#
-#     # Test each category pair
-#     for cat1, cat2 in category_pairs:
-#         print(f"\nTesting {cat1} + {cat2} combinations...")
-#
-#         # Test all strength combinations for this category pair
-#         for attack1_name, attack1_func in attack_categories[cat1]:
-#             for attack2_name, attack2_func in attack_categories[cat2]:
-#                 # Apply attacks in sequence: attack1 -> attack2
-#                 try:
-#                     attacked = attack1_func(watermarked.copy())
-#                     attacked = attack2_func(attacked)
-#
-#                     detected, wpsnr_val = detection(original, watermarked, attacked, Uwm, Vwm)
-#
-#                     # Store result
-#                     combo_name = f"{attack1_name} + {attack2_name}"
-#                     result = {
-#                         'Attack_1': attack1_name,
-#                         'Attack_2': attack2_name,
-#                         'Combined_Name': combo_name,
-#                         'WPSNR': wpsnr_val,
-#                         'Detected': detected,
-#                         'Removed': not detected
-#                     }
-#                     results.append(result)
-#
-#                     # Check if this is the best attack that removes watermark
-#                     if not detected and wpsnr_val > best_wpsnr:
-#                         best_wpsnr = wpsnr_val
-#                         best_attack = {
-#                             'name': combo_name,
-#                             'attack1': (attack1_name, attack1_func),
-#                             'attack2': (attack2_name, attack2_func),
-#                             'wpsnr': wpsnr_val,
-#                             'image': attacked.copy()
-#                         }
-#
-#                     # Print progress for successful removals
-#                     if not detected:
-#                         print(f"  ✓ {combo_name:50s} WPSNR: {wpsnr_val:6.2f} dB (REMOVED)")
-#                     else:
-#                         print(f"  ✗ {combo_name:50s} WPSNR: {wpsnr_val:6.2f} dB (DETECTED)")
-#
-#                 except Exception as e:
-#                     print(f"  ✗ Error with {attack1_name} + {attack2_name}: {str(e)}")
-#                     continue
-#
-#     # Convert results to DataFrame
-#     df = pd.DataFrame(results)
-#
-#     # Sort by WPSNR (descending) for removed watermarks
-#     df_removed = df[df['Removed'] == True].sort_values('WPSNR', ascending=False)
-#     df_detected = df[df['Removed'] == False].sort_values('WPSNR', ascending=False)
-#
-#     # Print summary
-#     print("\n" + "=" * 80)
-#     print(f"{'COMBINED ATTACK RESULTS SUMMARY':^80}")
-#     print("=" * 80)
-#     print(f"\nTotal combinations tested: {len(results)}")
-#     print(f"Watermark removed: {len(df_removed)} ({len(df_removed)/len(results)*100:.1f}%)")
-#     print(f"Watermark survived: {len(df_detected)} ({len(df_detected)/len(results)*100:.1f}%)")
-#
-#     print(f"{'BEST ATTACK (Highest WPSNR that removes watermark)':^80}")
-#     print("=" * 80)
-#     if best_attack:
-#         print(f"Attack: {best_attack['name']}")
-#         print(f"WPSNR:  {best_attack['wpsnr']:.2f} dB")
-#         print(f"Status: WATERMARK REMOVED ✓")
-#
-#         # Save best attack result
-#         if output_dir:
-#             os.makedirs(output_dir, exist_ok=True)
-#             best_path = os.path.join(output_dir, "best_combined_attack.png")
-#             cv2.imwrite(best_path, best_attack['image'])
-#             print(f"\nBest attack image saved to: {best_path}")
-#     else:
-#         print("\n⚠ Warning: No combined attack successfully removed the watermark!")
-#
-#     return {
-#         'best_attack': best_attack,
-#         'results_df': df,
-#         'removed_df': df_removed,
-#         'detected_df': df_detected
-#     }
