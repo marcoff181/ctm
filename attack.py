@@ -1,18 +1,9 @@
 import os
 import cv2
 import numpy as np
-from matplotlib import pyplot as plt
-from PIL import Image
-from scipy.ndimage import gaussian_filter
-from scipy.signal import medfilt
-from skimage.transform import rescale
-
-from embedding import embedding
 from detection import detection as crispy_detection
 
-from wpsnr import wpsnr
 import pandas as pd
-from itertools import combinations
 from attack_functions import awgn, blur, sharpening, median, resizing, jpeg_compression
 from utilities import edges_mask, noisy_mask
 
