@@ -8,13 +8,8 @@ from scipy.signal import medfilt
 from skimage.transform import rescale
 
 from embedding import embedding
-from detection import (
-    detection,
-    extraction,
-    similarity,
-    compute_threshold,
-    verify_watermark_extraction,
-)
+from detection import detection as crispy_detection
+
 from wpsnr import wpsnr
 import pandas as pd
 from itertools import combinations
@@ -22,12 +17,10 @@ from attack_functions import awgn, blur, sharpening, median, resizing, jpeg_comp
 from utilities import edges_mask, noisy_mask
 
 
-# Configuration
-# images_path = "./images"
 alpha = 20  # Embedding strength for LH and HL subbands
 beta = 30 # Embedding strength for LL subband (typically lower than alpha)
-mark_size = 1024
-mark_path = "./crispymcmark.npy"
+
+# hardcoded stuff
 input_dir = "./watermarked_groups_images/"
 output_dir = "./attacked_groups_images/"
 originals_dir = "./challenge_images/"
@@ -55,11 +48,13 @@ attack_config = {
     ),
 }
 
-
-
+detection_functions = {
+    "crispymcmark": lambda i1, i2, i3: crispy_detection(i1, i2, i3,10000,1000),
+    # "group_name" : lambda (orig,water,attack) : their function  
+} 
 
 # TODO: tweak iterations to find balance between speed and accuracy
-def bin_search_attack(original, watermarked, detection, mask, alpha, beta, mark_path, iterations=6):
+def bin_search_attack(original, watermarked, detection, mask, alpha, beta, iterations=6):
     results = []
 
     for attack_name, attack_func in attack_config.items():
@@ -76,9 +71,7 @@ def bin_search_attack(original, watermarked, detection, mask, alpha, beta, mark_
             try:
                 full_attacked_img = attack_func(watermarked.copy(), mid)
                 attacked_img = np.where(mask, full_attacked_img, watermarked)
-                detected, wpsnr_val = detection(
-                    original, watermarked, attacked_img, alpha=alpha, beta=beta
-                )
+                detected, wpsnr_val = detection(original, watermarked, attacked_img)
                 actual_param = param_converters[attack_name](mid)
 
                 if not detected:
@@ -95,11 +88,6 @@ def bin_search_attack(original, watermarked, detection, mask, alpha, beta, mark_
         if best_param is not None:
             actual_param = param_converters[attack_name](best_param)
             
-            # Verify watermark extraction after attack
-            original_watermark = np.load(mark_path)
-            extracted_after_attack = extraction(original, best_attacked, alpha=alpha, beta=beta)
-            sim_after_attack = similarity(original_watermark, extracted_after_attack)
-            
             print(
                 f"  ✓ {attack_name}: Optimal param = {actual_param:.4f} | WPSNR: {best_wpsnr:.2f} dB"
             )
@@ -108,7 +96,6 @@ def bin_search_attack(original, watermarked, detection, mask, alpha, beta, mark_
                     "Attack": attack_name,
                     "Best_Parameter": actual_param,
                     "WPSNR": best_wpsnr,
-                    "Similarity": sim_after_attack,
                     "Status": "Removed",
                 }
             )
@@ -119,34 +106,20 @@ def bin_search_attack(original, watermarked, detection, mask, alpha, beta, mark_
                     "Attack": attack_name,
                     "Best_Parameter": np.nan,
                     "WPSNR": np.nan,
-                    "Similarity": np.nan,
                     "Status": "Not Removed",
                 }
             )
     return pd.DataFrame(results)
 
-
-def main():
+def full_attack(detection_functions):
     print("===============================================")
     print("CrispyMcMark Attack Suite")
     print("===============================================")
-    print(f"Alpha (LH/HL): {alpha}")
-    print(f"Beta (LL):     {beta}")
 
     # Setup directories
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(input_dir, exist_ok=True)
     os.makedirs(originals_dir, exist_ok=True)
-
-    # TODO: remove ------------------------------------------------------------------
-    # generate an image to simulate having images to attack
-    if len(os.listdir(input_dir)) == 0:
-        watermarked, watermark = embedding(
-            "./challenge_images/0002.bmp", mark_path, alpha, beta
-        )
-        watermarked = watermarked.astype(np.uint8)
-        cv2.imwrite("./watermarked_groups_images/cryspymcmark_0002.bmp", watermarked)
-    # --------------------------------------------------------------------------------
     
     # Load image
     for filename in sorted(os.listdir(input_dir)):
@@ -154,6 +127,7 @@ def main():
 
         # expected image name is groupName_imageName.bmp
         group_name, image_name = os.path.splitext(filename)[0].split("_")
+        det_fun = detection_functions[group_name]
 
         watermarked = cv2.imread(image_path, 0)
         print(f"\nAttacking image: {image_name}")
@@ -163,46 +137,36 @@ def main():
         original_path = os.path.join(originals_dir, image_name + ".bmp")
         original = cv2.imread(original_path, 0)
 
-        # Print quality metrics
-        # TODO: leave to check what is the original WPSNR of the watermaked image
-        wpsnr_val = wpsnr(original, watermarked)
-        print(f"\nWatermark Quality:")
+        detected, wpsnr_val = det_fun(original,watermarked,watermarked)
+        print(f"\nNon-attacked image:")
         print(f"  WPSNR: {wpsnr_val:6.2f} dB")
-
-
-        # TODO: remove 
-        # VERIFY WATERMARK EXTRACTION FIRST
-        extraction_results = verify_watermark_extraction(
-            original, watermarked, alpha, beta, mark_path, 
-            output_prefix=f"{group_name}_{image_name}_"
-        )
-        
-        if extraction_results['similarity'] < 0.7:
-            print("\n[WARNING] Watermark extraction is not working properly!")
-            print("  Skipping attacks as detection may not be reliable.")
+        print(f"  detected: {detected}")
+        if detected != 1:
+            print("\n[WARNING] Detection did not detect watermark in non-attcked image, skipping...")
             continue
-        # -------------
-
+        
         print("\nBinary search with no mask...")
         mask = original >= 0
-        res = bin_search_attack(original, watermarked, detection, mask, alpha, beta, mark_path)
+        res = bin_search_attack(original, watermarked, det_fun, mask, alpha, beta)
         print(f"\nResults:\n{res.to_string()}\n")
 
         print("Binary search with edges mask...")
         emask = edges_mask(original)
-        res = bin_search_attack(original, watermarked, detection, emask, alpha, beta, mark_path)
+        res = bin_search_attack(original, watermarked, det_fun, emask, alpha, beta)
         print(f"\nResults:\n{res.to_string()}\n")
 
         print("Binary search with noisy mask...")
         nmask = noisy_mask(original)
-        res = bin_search_attack(original, watermarked, detection, nmask, alpha, beta, mark_path)
+        res = bin_search_attack(original, watermarked, det_fun, nmask, alpha, beta)
 
+        # TODO: add parallelization
         # TODO: find best attack and save it in output
 
         # remove to run for all images
-        # TODO: add parallelization
         return
 
+def main():
+    full_attack(detection_functions)
 
 if __name__ == "__main__":
     main()
