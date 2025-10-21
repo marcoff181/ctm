@@ -16,10 +16,6 @@ from itertools import combinations
 from attack_functions import awgn, blur, sharpening, median, resizing, jpeg_compression
 from utilities import edges_mask, noisy_mask
 
-
-alpha = 20  # Embedding strength for LH and HL subbands
-beta = 30 # Embedding strength for LL subband (typically lower than alpha)
-
 # hardcoded stuff
 input_dir = "./watermarked_groups_images/"
 output_dir = "./attacked_groups_images/"
@@ -54,7 +50,7 @@ detection_functions = {
 } 
 
 # TODO: tweak iterations to find balance between speed and accuracy
-def bin_search_attack(original, watermarked, detection, mask, alpha, beta, iterations=6):
+def bin_search_attack(original, watermarked, detection, mask, iterations=6):
     results = []
 
     for attack_name, attack_func in attack_config.items():
@@ -68,26 +64,20 @@ def bin_search_attack(original, watermarked, detection, mask, alpha, beta, itera
             if abs(high - low) < 1e-6:
                 break
 
-            try:
-                full_attacked_img = attack_func(watermarked.copy(), mid)
-                attacked_img = np.where(mask, full_attacked_img, watermarked)
-                detected, wpsnr_val = detection(original, watermarked, attacked_img)
-                actual_param = param_converters[attack_name](mid)
+            full_attacked_img = attack_func(watermarked.copy(), mid)
+            attacked_img = np.where(mask, full_attacked_img, watermarked)
+            detected, wpsnr_val = detection(original, watermarked, attacked_img)
+            actual_param = param_converters[attack_name](mid)
 
-                if not detected:
-                    best_param, best_wpsnr = mid, wpsnr_val
-                    best_attacked = attacked_img.copy()
-                    high = mid
-                else:
-                    low = mid
-
-            except Exception as e:
-                print(f"Error during {attack_name} with param {mid}: {e}")
-                break
+            if not detected:
+                best_param, best_wpsnr = mid, wpsnr_val
+                best_attacked = attacked_img.copy()
+                high = mid
+            else:
+                low = mid
 
         if best_param is not None:
             actual_param = param_converters[attack_name](best_param)
-            
             print(
                 f"  ✓ {attack_name}: Optimal param = {actual_param:.4f} | WPSNR: {best_wpsnr:.2f} dB"
             )
@@ -147,17 +137,17 @@ def full_attack(detection_functions):
         
         print("\nBinary search with no mask...")
         mask = original >= 0
-        res = bin_search_attack(original, watermarked, det_fun, mask, alpha, beta)
+        res = bin_search_attack(original, watermarked, det_fun, mask)
         print(f"\nResults:\n{res.to_string()}\n")
 
         print("Binary search with edges mask...")
         emask = edges_mask(original)
-        res = bin_search_attack(original, watermarked, det_fun, emask, alpha, beta)
+        res = bin_search_attack(original, watermarked, det_fun, emask)
         print(f"\nResults:\n{res.to_string()}\n")
 
         print("Binary search with noisy mask...")
         nmask = noisy_mask(original)
-        res = bin_search_attack(original, watermarked, det_fun, nmask, alpha, beta)
+        res = bin_search_attack(original, watermarked, det_fun, nmask)
 
         # TODO: add parallelization
         # TODO: find best attack and save it in output
