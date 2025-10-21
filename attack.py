@@ -27,7 +27,7 @@ from utilities import edges_mask, noisy_mask
 alpha = 20  # Embedding strength for LH and HL subbands
 beta = 30 # Embedding strength for LL subband (typically lower than alpha)
 mark_size = 1024
-mark_path = "./mark.npy"
+mark_path = "./crispymcmark.npy"
 input_dir = "./watermarked_groups_images/"
 output_dir = "./attacked_groups_images/"
 originals_dir = "./challenge_images/"
@@ -59,7 +59,7 @@ attack_config = {
 
 
 # TODO: tweak iterations to find balance between speed and accuracy
-def bin_search_attack(original, watermarked, detection, Uwm, Vwm, mask, alpha, beta, mark_path, iterations=6):
+def bin_search_attack(original, watermarked, detection, mask, alpha, beta, mark_path, iterations=6):
     results = []
 
     for attack_name, attack_func in attack_config.items():
@@ -77,7 +77,7 @@ def bin_search_attack(original, watermarked, detection, Uwm, Vwm, mask, alpha, b
                 full_attacked_img = attack_func(watermarked.copy(), mid)
                 attacked_img = np.where(mask, full_attacked_img, watermarked)
                 detected, wpsnr_val = detection(
-                    original, watermarked, attacked_img, Uwm, Vwm, alpha=alpha, beta=beta
+                    original, watermarked, attacked_img, alpha=alpha, beta=beta
                 )
                 actual_param = param_converters[attack_name](mid)
 
@@ -97,7 +97,7 @@ def bin_search_attack(original, watermarked, detection, Uwm, Vwm, mask, alpha, b
             
             # Verify watermark extraction after attack
             original_watermark = np.load(mark_path)
-            extracted_after_attack = extraction(original, best_attacked, Uwm, Vwm, alpha=alpha, beta=beta)
+            extracted_after_attack = extraction(original, best_attacked, alpha=alpha, beta=beta)
             sim_after_attack = similarity(original_watermark, extracted_after_attack)
             
             print(
@@ -138,13 +138,10 @@ def main():
     os.makedirs(input_dir, exist_ok=True)
     os.makedirs(originals_dir, exist_ok=True)
 
-    # TODO: hardcode Uwm and Vwm inside the detection func
-    _, _, Uwm, Vwm = embedding("./challenge_images/0002.bmp", mark_path, alpha, beta)
-
     # TODO: remove ------------------------------------------------------------------
     # generate an image to simulate having images to attack
     if len(os.listdir(input_dir)) == 0:
-        watermarked, watermark, Uwm, Vwm = embedding(
+        watermarked, watermark = embedding(
             "./challenge_images/0002.bmp", mark_path, alpha, beta
         )
         watermarked = watermarked.astype(np.uint8)
@@ -176,7 +173,7 @@ def main():
         # TODO: remove 
         # VERIFY WATERMARK EXTRACTION FIRST
         extraction_results = verify_watermark_extraction(
-            original, watermarked, Uwm, Vwm, alpha, beta, mark_path, 
+            original, watermarked, alpha, beta, mark_path, 
             output_prefix=f"{group_name}_{image_name}_"
         )
         
@@ -188,17 +185,17 @@ def main():
 
         print("\nBinary search with no mask...")
         mask = original >= 0
-        res = bin_search_attack(original, watermarked, detection, Uwm, Vwm, mask, alpha, beta, mark_path)
+        res = bin_search_attack(original, watermarked, detection, mask, alpha, beta, mark_path)
         print(f"\nResults:\n{res.to_string()}\n")
 
         print("Binary search with edges mask...")
         emask = edges_mask(original)
-        res = bin_search_attack(original, watermarked, detection, Uwm, Vwm, emask, alpha, beta, mark_path)
+        res = bin_search_attack(original, watermarked, detection, emask, alpha, beta, mark_path)
         print(f"\nResults:\n{res.to_string()}\n")
 
         print("Binary search with noisy mask...")
         nmask = noisy_mask(original)
-        res = bin_search_attack(original, watermarked, detection, Uwm, Vwm, nmask, alpha, beta, mark_path)
+        res = bin_search_attack(original, watermarked, detection, nmask, alpha, beta, mark_path)
 
         # TODO: find best attack and save it in output
 

@@ -12,6 +12,7 @@ def get_watermark_svd(watermark_path):
     return watermark, U, S, V
 
 
+# TODO: change signature to be (original_image_name?, watermark_name) -> watermarked image
 def embedding(original_image_path, watermark_path, alpha, beta, type="additive"):
     """
     Embed watermark by modifying singular values of LL, LH and HL subbands.
@@ -25,7 +26,7 @@ def embedding(original_image_path, watermark_path, alpha, beta, type="additive")
     """
     # Load image and watermark
     image = cv2.imread(original_image_path, 0)
-    watermark, Uwm, Swm, Vwm = get_watermark_svd(watermark_path)
+    watermark, Uw, Sw, Vw = get_watermark_svd(watermark_path)
 
     # Start timing
     start = time.time()
@@ -44,20 +45,20 @@ def embedding(original_image_path, watermark_path, alpha, beta, type="additive")
     S_new_LL = Si_LL.copy()
     S_new_LH = Si_LH.copy()
     S_new_HL = Si_HL.copy()
-    num_watermark_values = len(Swm)
+    num_watermark_values = len(Sw)
 
     if type == "multiplicative":
         # LL with beta
-        S_new_LL[:num_watermark_values] = Si_LL[:num_watermark_values] * (1 + beta * Swm)
+        S_new_LL[:num_watermark_values] = Si_LL[:num_watermark_values] * (1 + beta * Sw)
         # LH and HL with alpha
-        S_new_LH[:num_watermark_values] = Si_LH[:num_watermark_values] * (1 + alpha * Swm)
-        S_new_HL[:num_watermark_values] = Si_HL[:num_watermark_values] * (1 + alpha * Swm)
+        S_new_LH[:num_watermark_values] = Si_LH[:num_watermark_values] * (1 + alpha * Sw)
+        S_new_HL[:num_watermark_values] = Si_HL[:num_watermark_values] * (1 + alpha * Sw)
     else:
         # LL with beta
-        S_new_LL[:num_watermark_values] = Si_LL[:num_watermark_values] + beta * Swm
+        S_new_LL[:num_watermark_values] = Si_LL[:num_watermark_values] + beta * Sw
         # LH and HL with alpha
-        S_new_LH[:num_watermark_values] = Si_LH[:num_watermark_values] + alpha * Swm
-        S_new_HL[:num_watermark_values] = Si_HL[:num_watermark_values] + alpha * Swm
+        S_new_LH[:num_watermark_values] = Si_LH[:num_watermark_values] + alpha * Sw
+        S_new_HL[:num_watermark_values] = Si_HL[:num_watermark_values] + alpha * Sw
 
     # Reconstruct subbands with SVD
     LL_new = Ui_LL.dot(np.diag(S_new_LL)).dot(Vi_LL)
@@ -79,4 +80,4 @@ def embedding(original_image_path, watermark_path, alpha, beta, type="additive")
 
     end = time.time()
 
-    return watermarked_image, watermark, Uwm, Vwm
+    return watermarked_image, watermark
