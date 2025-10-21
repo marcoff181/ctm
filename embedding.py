@@ -65,47 +65,69 @@ def resizing(img, scale):
 
 
 def attack_image(original_image):
+    """
+    Intelligent attack phase: uses binary search to find the most effective attack parameters.
+    For each attack, finds the parameter that maximizes the difference while keeping the image valid.
+    Resizes attacked images back to original shape if needed.
+    """
+    blank_image = np.zeros_like(original_image, dtype=np.float64)
 
-    blank_image = np.float64(np.zeros((512,512)))
+    param_converters = {
+        "JPEG": lambda x: int(round((1 - x) * 100)),
+        "Blur": lambda x: x * 10,
+        "AWGN": lambda x: x * 50,
+        "Resize": lambda x: max(0.001, 0.5 ** (x * 10)),
+        "Median": lambda x: [1, 3, 5, 7][int(round(x * 3))],
+        "Sharp": lambda x: x * 3,
+    }
+
+    attack_config = {
+        "JPEG": lambda img, x: jpeg_compression(img, QF=param_converters["JPEG"](x)),
+        "Blur": lambda img, x: blur(img, sigma=param_converters["Blur"](x)),
+        "AWGN": lambda img, x: awgn(img, std=param_converters["AWGN"](x), seed=None),
+        "Resize": lambda img, x: resizing(img, scale=param_converters["Resize"](x)),
+        "Median": lambda img, x: median(img, kernel_size=param_converters["Median"](x)),
+        "Sharp": lambda img, x: sharpening(img, sigma=1.0, alpha=param_converters["Sharp"](x)),
+    }
 
     start = time.time()
-
-    blur_sigma_values = [0.1, 0.5, 1, 2, [1, 1], [2, 1]]
-    for sigma in blur_sigma_values:
-        attacked_image_tmp = blur(original_image, sigma)
-        blank_image += np.abs(attacked_image_tmp - original_image)
-
-    kernel_size = [3, 5, 7, 9, 11]
-    for k in kernel_size:
-        attacked_image_tmp = median(original_image, k)
-        blank_image += np.abs(attacked_image_tmp - original_image)
-
-    awgn_std = [0.1, 0.5, 2, 5, 10]
-    for std in awgn_std:
-        attacked_image_tmp = awgn(original_image, std, 0)
-        blank_image += np.abs(attacked_image_tmp - original_image)
-
-    sharpening_sigma_values = [0.1, 0.5, 2, 100]
-    sharpening_alpha_values = [0.1, 0.5, 1, 2]
-    for sharpening_sigma in sharpening_sigma_values:
-        for sharpening_alpha in sharpening_alpha_values:
-            attacked_image_tmp = sharpening(original_image, sharpening_sigma, sharpening_alpha)
-            blank_image += np.abs(attacked_image_tmp - original_image)
-
-    resizing_scale_values = [0.5, 0.75, 0.9, 1.1, 1.5]
-    for scale in resizing_scale_values:
-        attacked_image_tmp = cv2.resize(original_image, (0, 0), fx=scale, fy=scale)
-        attacked_image_tmp = cv2.resize(attacked_image_tmp, (512, 512))
-        blank_image += np.abs(attacked_image_tmp - original_image)
+    for attack_name, attack_func in attack_config.items():
+        low, high = 0.0, 1.0
+        best_param = 0.0
+        best_diff = -np.inf
+        iterations = 8
+        for _ in range(iterations):
+            mid = (low + high) / 2
+            try:
+                attacked = attack_func(original_image, mid)
+                # Resize if needed
+                if attacked.shape != original_image.shape:
+                    attacked = cv2.resize(attacked, (original_image.shape[1], original_image.shape[0]))
+                diff = np.sum(np.abs(attacked.astype(np.float64) - original_image))
+                if diff > best_diff:
+                    best_diff = diff
+                    best_param = mid
+                low = mid
+            except Exception as e:
+                print(f"[ATTACK] Error in {attack_name} with param {mid:.2f}: {e}")
+                break
+        # Apply best attack found
+        try:
+            attacked = attack_func(original_image, best_param)
+            if attacked.shape != original_image.shape:
+                attacked = cv2.resize(attacked, (original_image.shape[1], original_image.shape[0]))
+            blank_image += np.abs(attacked.astype(np.float64) - original_image)
+        except Exception as e:
+            print(f"[ATTACK] Final error in {attack_name} with param {best_param:.2f}: {e}")
 
     end = time.time()
-
-    print(f"[EMBEDDING] Attack Phase duration: {str(end-start)}")
+    print(f"[EMBEDDING] Intelligent Attack Phase (binary search) duration: {end - start:.2f}s")
 
     return blank_image
 
 def IsTooBrightorTooDark(block):
-    return np.mean(block) < BRIGHTNESS_THRESHOLD and np.mean(block) > DARKNESS_THRESHOLD
+    mean_val = np.mean(block)
+    return DARKNESS_THRESHOLD < mean_val < BRIGHTNESS_THRESHOLD
 
 def select_best_blocks(original_image, attacked_image, n_blocks,  block_size):
     """
@@ -172,7 +194,7 @@ def embedding(original_image_path, watermark_path, alpha, dwt_level):
     
     start = time.time()
 
-    # Compute attack resistance map (DO NOT modify it later!)
+    # Compute attack resistance map
     attacked_image = attack_image(image)
 
     # Select best blocks
@@ -181,52 +203,45 @@ def embedding(original_image_path, watermark_path, alpha, dwt_level):
     n_blocks_in_image = image.shape[0] / BLOCK_SIZE
     shape_LL_tmp = np.uint8(np.floor(image.shape[0] / (2*n_blocks_in_image))) 
     
-    # Create copies
+    # Prepare output images
     watermarked_image = image.astype(np.float64)
     binary_mask = np.zeros_like(image, dtype=np.float64)
 
-    # Embed watermark
-    for i in range(len(selected_blocks)):
-        x = selected_blocks[i]['locations'][0]
-        y = selected_blocks[i]['locations'][1]
+    # Embed watermark in selected blocks
+    for idx, block_info in enumerate(selected_blocks):
+        block_x, block_y = block_info['locations']
+        block = image[block_x:block_x + BLOCK_SIZE, block_y:block_y + BLOCK_SIZE]
 
-        block_original = image[x:x + BLOCK_SIZE, y:y + BLOCK_SIZE]
-        coeffs = pywt.wavedec2(block_original, wavelet='haar', level=1)
-        LL_tmp = coeffs[0]
-        Ui, Si, Vi = np.linalg.svd(LL_tmp)
-        Sw = Si.copy()
+        # DWT and SVD
+        coeffs = pywt.wavedec2(block, wavelet='haar', level=1)
+        LL = coeffs[0]
+        U, S, V = np.linalg.svd(LL)
+        S_new = S.copy()
 
-        # Fixed indexing without modulo
-        start_idx = i * shape_LL_tmp
-        end_idx = start_idx + shape_LL_tmp
-        
-        if end_idx <= len(Swm):
-            Sw += Swm[start_idx:end_idx] * alpha
-            LL_new = (Ui).dot(np.diag(Sw)).dot(Vi)
+        # Watermark singular values for this block
+        wm_start = idx * shape_LL_tmp
+        wm_end = wm_start + shape_LL_tmp
+
+        if wm_end <= len(Swm):
+            S_new += Swm[wm_start:wm_end] * alpha
+            LL_new = U @ np.diag(S_new) @ V
             coeffs[0] = LL_new
-            block_new = pywt.waverec2(coeffs, wavelet='haar')
-            watermarked_image[x:x + BLOCK_SIZE, y:y + BLOCK_SIZE] = block_new
-            
-            # Mark in binary mask
-            binary_mask[x:x + BLOCK_SIZE, y:y + BLOCK_SIZE] = 1
+            block_watermarked = pywt.waverec2(coeffs, wavelet='haar')
 
-    watermarked_image = watermarked_image.astype(np.uint8)
+            # Place watermarked block and update mask
+            watermarked_image[block_x:block_x + BLOCK_SIZE, block_y:block_y + BLOCK_SIZE] = block_watermarked
+            binary_mask[block_x:block_x + BLOCK_SIZE, block_y:block_y + BLOCK_SIZE] = 1
 
-    # Apply correction using BINARY MASK (not attack accumulation)
+    # Finalize watermarked image
+    watermarked_image = np.clip(watermarked_image, 0, 255).astype(np.uint8)
     difference = (-watermarked_image + image) * binary_mask.astype(np.uint8)
     watermarked_image = image + difference
     watermarked_image += binary_mask.astype(np.uint8)
 
     end = time.time()
-    
     w = wpsnr(image, watermarked_image)
-    print("[EMEDDING] wPSNR: %.2fdB" % w)
+    print("[EMBEDDING] wPSNR: %.2fdB" % w)
     print(f"[EMBEDDING] Time: {end - start:.2f}s")
     print(f"[EMBEDDING] Embedded in {len(selected_blocks)} blocks of size {BLOCK_SIZE}x{BLOCK_SIZE}")
-    
-    #plot watermarked image
-    # plt.title('Watermarked image')
-    # plt.imshow(watermarked_image, cmap='gray')
-    # plt.show()
-    
+
     return watermarked_image, watermark, Uwm, Vwm

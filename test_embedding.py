@@ -20,7 +20,7 @@ def main():
     # =================================================================
     #                       IMAGE GENERATION
     # =================================================================
-    image_index = "0002"
+    image_index = "0010"
     print(f"Image: {image_index}")
     
     # embedding() signature: (original_image_path, watermark_path, alpha, dwt_level)

@@ -174,14 +174,12 @@ def extract_singular_values(original_image, attacked_image, blocks, block_size, 
     """
     extracted_S = np.zeros(32)
     counts = np.zeros(32)
-    n_blocks_in_image = original_image.shape[0] / block_size
-
+    
     for idx, block_info in enumerate(blocks):
         if idx >= 32:  # Only use first 32 blocks
             break
             
-        x = block_info['locations'][0]
-        y = block_info['locations'][1]
+        x, y = block_info['locations']
         
         # Extract from attacked image
         block_attacked = attacked_image[x:x + block_size, y:y + block_size]
