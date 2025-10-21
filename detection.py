@@ -1,11 +1,19 @@
 import os
+import time
 import numpy as np
 import pywt
-from scipy.fft import dct, idct
-from wpsnr import wpsnr
-from matplotlib import pyplot as plt
+import cv2
 
-Uw = np.array(
+from wpsnr import wpsnr
+
+
+# DUE TO SELF CONTAINED NATURE
+ALPHA = 5.11
+BLOCKS_TO_EMBED = 32
+BLOCK_SIZE = 4
+WATERMARK_SIZE = 1024
+
+Uwm = np.array(
 [[-2.31267458e-01  ,5.73428696e-02 ,-2.26156433e-01  ,1.30579290e-01 ,-5.81210093e-03  ,1.38494753e-01  ,1.74246841e-01 ,-5.55574921e-02  ,7.71068824e-02  ,1.13620622e-01  ,2.03035610e-01  ,9.10635146e-02  ,2.08595775e-01 ,-2.42470021e-01 ,-1.11385100e-01 ,-2.07218918e-01  ,2.89637010e-01  ,3.66299869e-01 ,-7.33106387e-02  ,1.48494224e-01 ,-2.56492373e-01  ,2.16943705e-01  ,1.67666511e-03  ,8.70096585e-02 ,-2.01149970e-01 ,-1.89513387e-01 ,-2.40338304e-01 ,-1.15414849e-01  ,2.59539121e-01  ,1.20545652e-01 ,-8.00391995e-03  ,3.18239287e-02],
  [-2.05147866e-01 ,-1.96786609e-02 ,-1.76335905e-01  ,3.30735951e-03 ,-1.16140434e-01  ,1.26546687e-02 ,-3.57538902e-01  ,2.66702499e-02  ,2.92362816e-01 ,-1.55768960e-01 ,-1.41960557e-01 ,-2.65037193e-01 ,-1.54905659e-01 ,-4.99182856e-03 ,-1.61453962e-01 ,-1.39308853e-01 ,-1.35824025e-01  ,2.77714551e-01  ,1.74166303e-01  ,1.97658476e-02  ,8.39851995e-02  ,2.04621492e-02 ,-4.80131969e-02 ,-6.12143322e-02  ,2.85899271e-02 ,-4.80834954e-01  ,3.22832772e-02 ,-5.18619660e-02 ,-3.48884970e-01 ,-1.26829613e-01  ,3.16863013e-02 ,-1.45044006e-02],
  [-1.80547739e-01  ,1.81290038e-01  ,2.91480359e-01 ,-4.08781312e-02  ,1.77028642e-01  ,2.61017232e-02  ,1.31097413e-02 ,-1.17979541e-01  ,3.55584695e-01 ,-1.12395407e-01  ,2.24707035e-01  ,7.96335466e-02 ,-5.10752852e-02 ,-1.94355743e-01 ,-3.08979110e-02 ,-1.44432310e-01 ,-4.28368968e-02  ,2.48719807e-02 ,-2.39119662e-01  ,1.47999859e-02  ,1.12668912e-01  ,6.53379212e-02 ,-3.08575272e-01 ,-2.95094436e-01  ,6.19351034e-02  ,3.61226921e-01 ,-1.18209374e-01 ,-1.48105097e-01 ,-2.27209795e-01 ,-8.20203353e-02  ,2.34730241e-01  ,2.99000951e-02],
@@ -40,7 +48,7 @@ Uw = np.array(
  [-1.59216361e-01 ,-2.13792602e-01 ,-8.91522231e-02  ,8.70514809e-02  ,1.81346439e-01  ,1.75677312e-01  ,9.42497648e-02 ,-1.02016327e-01  ,1.65959560e-01  ,3.14891470e-01 ,-4.10006326e-01 ,-2.61768596e-01  ,5.34449373e-02 ,-2.82287694e-01  ,2.34126614e-01  ,2.69512003e-01  ,5.30609135e-02  ,1.36255811e-01 ,-7.02352117e-02 ,-2.68075968e-01 ,-8.54493006e-02 ,-1.92481627e-02 ,-1.53375979e-01  ,9.91278243e-02 ,-2.05447253e-02  ,1.38419115e-01  ,1.76142788e-01  ,1.54135056e-01  ,2.99812092e-03 ,-1.36791978e-01  ,1.47271349e-01  ,5.54831261e-02]]
 )
 
-Vw = np.array(
+Vwm = np.array(
 [[-1.07801351e-01 ,-1.62989079e-01 ,-2.47504715e-01 ,-1.91390040e-01 ,-2.26149919e-01 ,-1.56860972e-01 ,-2.08930485e-01 ,-1.35248018e-01 ,-1.93700628e-01 ,-1.07170100e-01 ,-1.41582287e-01 ,-2.04331997e-01 ,-1.65237370e-01 ,-1.72813889e-01 ,-1.48589744e-01 ,-1.65920172e-01 ,-2.29499293e-01 ,-1.94101463e-01 ,-2.18371434e-01 ,-1.59149646e-01 ,-1.76558979e-01 ,-1.73982593e-01 ,-1.98932046e-01 ,-1.39999908e-01 ,-1.95765103e-01 ,-1.43445399e-01 ,-1.88965755e-01 ,-1.34121599e-01 ,-1.32544789e-01 ,-1.93696308e-01 ,-1.84946175e-01 ,-1.50953716e-01],
  [-2.05898522e-01  ,6.35147973e-02  ,8.91327114e-02  ,1.44651522e-01  ,3.33239322e-01 ,-1.66949907e-01 ,-1.27730848e-01 ,-2.98306228e-01 ,-7.79201862e-02  ,1.21920451e-03  ,1.08850441e-01 ,-1.11564200e-01 ,-2.07611396e-02  ,8.36854683e-02 ,-1.69946423e-01  ,3.20195555e-01  ,2.45673772e-01 ,-1.79603261e-01  ,4.55612768e-02 ,-1.29693895e-01 ,-2.68787000e-01 ,-2.83037283e-01  ,9.91611610e-02  ,5.53635910e-02  ,1.55346100e-01  ,1.10910791e-01  ,8.43370208e-02 ,-2.79925748e-01  ,8.95921905e-02  ,1.77827280e-01 ,-4.95321040e-02 ,-2.65517962e-01],
  [ 1.79496435e-01 ,-1.35674488e-01  ,1.69310536e-01 ,-1.95328721e-01 ,-1.34321415e-02  ,1.48508526e-01  ,1.03350912e-01 ,-1.67319290e-01  ,8.21847721e-02 ,-6.11777049e-02 ,-2.37372801e-01 ,-7.42110516e-02 ,-2.54324631e-01 ,-2.01229287e-01 ,-1.53541371e-01 ,-3.24129956e-01  ,7.91978700e-02 ,-1.54527714e-01  ,1.44933091e-01 ,-3.78139528e-02  ,1.06506870e-01 ,-1.95971012e-01  ,2.82724506e-01 ,-9.51300972e-03  ,3.57546803e-02  ,8.23487476e-02  ,2.25310658e-01  ,2.35848465e-01  ,3.58550906e-01  ,1.58393051e-01 ,-2.51554651e-01 ,-4.18039411e-02],
@@ -75,96 +83,155 @@ Vw = np.array(
  [ 3.38024053e-01 ,-1.20438636e-01  ,1.39515378e-02  ,1.83792650e-01 ,-2.69843455e-02  ,6.48550972e-02 ,-1.30501561e-01  ,2.55264710e-01  ,1.47048585e-01 ,-1.40324141e-01 ,-8.66521971e-03 ,-3.32686125e-02 ,-3.02344354e-01  ,6.60229157e-02 ,-2.75855058e-01  ,1.32296710e-01 ,-1.30709950e-01 ,-2.68407937e-01  ,2.15943185e-01 ,-1.91231309e-02  ,2.05205499e-02  ,1.66797682e-01  ,1.38854625e-01 ,-7.21314594e-02 ,-1.05590051e-01  ,1.44185703e-01 ,-2.28930888e-01 ,-1.94790927e-02 ,-2.92807143e-01  ,2.57244614e-01  ,2.17571533e-01 ,-2.13171975e-01]]
 )
 
-# TODO: make signature become:
-# def detection(input1, input2, input3):
-# ’’’
-# YOUR CODE
-# ’’’
-# return output1, output2
-#  input1 corresponds to the string of the name of the original image
-# • input2 corresponds to the string of the name of the watermarked image
-# • input3 corresponds to the string of the name of the attacked image
-# • output1: if the attacked image contains the watermark it is equal to 1 , otherwise it is equal to 0
-# • output2 corresponds to the WPSNR value between the watermarked and the attacked imag
-# TODO: make sure this file runs by itself without relying on external stuff when turning it in for the challenge
-def detection(original, watermarked, attacked, alpha, beta):
-    extracted_wm = extraction(original, attacked, alpha=alpha, beta=beta)
-    original_wm = extraction(original, watermarked, alpha=alpha, beta=beta)
+def detection(input1, input2, input3):
 
-    # Measure quality
-    wpsnr_attack = wpsnr(watermarked, attacked)
+    original_image = cv2.imread(input1, 0).copy()
+    watermarked_image = cv2.imread(input2, 0).copy()
+    attacked_image = cv2.imread(input3, 0).copy()
 
-    # Detect watermark
-    sim = similarity(original_wm, extracted_wm)
+    # start time
+    start = time.time()
 
-    # TODO: use ROC to compute final threshold
-    detected = 1 if sim > 0.7 else 0
+        #extract watermark from watermarked image
+    watermarked_image_dummy = watermarked_image.copy()
+    # Extract watermark from attacked image
+    original_watermark = extraction(
+        original_image, 
+        watermarked_image, 
+        watermarked_image_dummy,
+    )
+    watermark_extracted = extraction(
+        original_image, 
+        watermarked_image, 
+        attacked_image,
+    )
 
-    return detected, wpsnr_attack
+     # Compute similarity
+    sim = similarity(original_watermark, watermark_extracted)
+
+    # Compute threshold (only once, can be cached)
+    T, _ = compute_threshold(WATERMARK_SIZE, original_watermark, N=1000)
+
+    # Determine watermark status
+    watermark_status = 1 if sim > T else 0
+    
+    # Compute quality metric
+    output2 = wpsnr(watermarked_image, attacked_image)
+
+    end = time.time()
+    print(f'[DETECTION] Time: {end - start:.2f}s')
+    print(f'[DETECTION] Similarity: {sim:.4f}, Threshold: {T:.4f}')
+    print(f'[DETECTION] Status: {"DETECTED" if watermark_status else "NOT DETECTED"}')
+    print(f'[DETECTION] wPSNR: {output2:.2f} dB')
+
+    return watermark_status, output2
 
 
-def extraction(original, watermarked, alpha, beta, type="additive"):
+def identify_watermarked_blocks(original_image, watermarked_image, block_size):
     """
-    Extract watermark from watermarked image.
+    Identify blocks where watermark was embedded by detecting modifications.
+    
+    Returns:
+        list of dicts with 'locations' key containing (x, y) tuples
+    """
+    blocks_with_watermark = []
+    difference = watermarked_image.astype(np.float64) - original_image.astype(np.float64)
+
+    for i in range(0, original_image.shape[0], block_size):
+        for j in range(0, original_image.shape[1], block_size):
+            block_diff = difference[i:i + block_size, j:j + block_size]
+            
+            # Block contains watermark if average difference is non-zero
+            if np.abs(np.mean(block_diff)) > 1e-6:
+                blocks_with_watermark.append({'locations': (i, j)})
+
+    return blocks_with_watermark
+
+def extract_singular_values(original_image, attacked_image, blocks, block_size, alpha):
+    """
+    Extract watermark singular values from selected blocks.
     
     Args:
-        original: Original image
-        watermarked: Watermarked/attacked image
-        alpha: Embedding strength for LH and HL subbands
-        beta: Embedding strength for LL subband
-        type: Embedding type ("multiplicative" or additive)
+        original_image: Original image
+        attacked_image: Attacked/watermarked image
+        blocks: List of block locations
+        block_size: Size of each block
+        alpha: Embedding strength
+        
+    Returns:
+        extracted_S: Array of 32 extracted singular values
     """
-    # Multi-level DWT decomposition
-    coeffs_original = pywt.dwt2(original, wavelet="haar")
-    coeffs_watermarked = pywt.dwt2(watermarked, wavelet="haar")
+    extracted_S = np.zeros(32)
+    counts = np.zeros(32)
 
-    LLi, (LHi, HLi, _) = coeffs_original  
-    LLa, (LHa, HLa, _) = coeffs_watermarked 
-
-    # SVD on LL, LH and HL subbands
-    _, Si_LL, _ = np.linalg.svd(LLi)
-    _, Sa_LL, _ = np.linalg.svd(LLa)
-    _, Si_LH, _ = np.linalg.svd(LHi)
-    _, Sa_LH, _ = np.linalg.svd(LHa)
-    _, Si_HL, _ = np.linalg.svd(HLi)
-    _, Sa_HL, _ = np.linalg.svd(HLa)
-
-    # Use the size of Uw/Vw to determine watermark dimensions
-    num_watermark_values = min(Uw.shape[1], Vw.shape[0])
-
-    # Extract from LL, LH and HL with appropriate alpha/beta values
-    if type == "multiplicative":
-        epsilon = 1e-10  # small constant to avoid division by zero
-        # LL with beta
-        diff_LL = Sa_LL[:num_watermark_values] - Si_LL[:num_watermark_values]
-        Sw_LL = diff_LL / (beta * Si_LL[:num_watermark_values] + epsilon)
+    for idx, block_info in enumerate(blocks):
+        if idx >= 32:  # Only use first 32 blocks
+            break
+            
+        x, y = block_info['locations']
         
-        # LH with alpha
-        diff_LH = Sa_LH[:num_watermark_values] - Si_LH[:num_watermark_values]
-        Sw_LH = diff_LH / (alpha * Si_LH[:num_watermark_values] + epsilon)
+        # Extract from attacked image
+        block_attacked = attacked_image[x:x + block_size, y:y + block_size].astype(np.float64)
+        coeffs_attacked = pywt.wavedec2(block_attacked, wavelet='haar', level=1)
+        LL_attacked = coeffs_attacked[0]
+        _, S_attacked, _ = np.linalg.svd(LL_attacked)
         
-        # HL with alpha
-        diff_HL = Sa_HL[:num_watermark_values] - Si_HL[:num_watermark_values]
-        Sw_HL = diff_HL / (alpha * Si_HL[:num_watermark_values] + epsilon)
-    else:
-        # LL with beta
-        Sw_LL = (Sa_LL[:num_watermark_values] - Si_LL[:num_watermark_values]) / beta
-        # LH with alpha
-        Sw_LH = (Sa_LH[:num_watermark_values] - Si_LH[:num_watermark_values]) / alpha
-        # HL with alpha
-        Sw_HL = (Sa_HL[:num_watermark_values] - Si_HL[:num_watermark_values]) / alpha
+        # Extract from original image
+        block_original = original_image[x:x + block_size, y:y + block_size].astype(np.float64)
+        coeffs_original = pywt.wavedec2(block_original, wavelet='haar', level=1)
+        LL_original = coeffs_original[0]
+        _, S_original, _ = np.linalg.svd(LL_original)
+        
+        # Compute difference (DO NOT use abs() - preserve sign!)
+        S_diff = (S_attacked - S_original) / alpha
+        
+        # Distribute to watermark singular values
+        n_values = len(S_diff)
+        start_idx = idx * n_values
+        end_idx = start_idx + n_values
+        
+        if end_idx <= 32:
+            extracted_S[start_idx:end_idx] += S_diff
+            counts[start_idx:end_idx] += 1
 
-    # Average the extracted singular values from all three subbands
-    Sw = (Sw_LL + Sw_LH + Sw_HL) / 3
+    # Average where multiple extractions occurred
+    mask = counts > 0
+    extracted_S[mask] /= counts[mask]
 
-    # Recompose watermark from singular values
-    extracted_watermark = Uw.dot(np.diag(Sw)).dot(Vw)
+    return extracted_S
 
-    # Flatten and binarize for similarity/BER
-    extracted_watermark = extracted_watermark.flatten()
-    extracted_watermark = (extracted_watermark > 0.5).astype(np.uint8)
 
-    return extracted_watermark
+def extraction(original_image, watermarked_image, attacked_image):
+
+    # start time
+    #start = time.time()
+
+    blocks_with_watermark = blocks_with_watermark = identify_watermarked_blocks(
+        original_image, 
+        watermarked_image, 
+        BLOCK_SIZE
+    )
+
+    # Extract singular values from each block
+    extracted_S = extract_singular_values(
+        original_image,
+        attacked_image,
+        blocks_with_watermark,
+        BLOCK_SIZE,
+        ALPHA
+    )
+
+    # Reconstruct watermark from singular values
+    watermark_matrix = Uwm.dot(np.diag(extracted_S)).dot(Vwm)
+    watermark_extracted = watermark_matrix.flatten()
+    
+    # Normalize and binarize
+    watermark_extracted = (watermark_extracted - watermark_extracted.min()) / (
+        watermark_extracted.max() - watermark_extracted.min() + 1e-10
+    )
+    watermark_extracted = (watermark_extracted > 0.5).astype(np.uint8)
+
+    return watermark_extracted
 
 
 def similarity(X, X_star):
@@ -206,179 +273,38 @@ def compute_threshold(mark_size, w, N=1000):
     return T, SIMs
 
 
-def verify_watermark_extraction(original, watermarked, alpha, beta, mark_path, output_prefix=""):
-    """Verify that the embedded watermark can be correctly extracted."""
+def verify_watermark_extraction(original, watermarked, alpha, mark_path, dwt_level=1, output_prefix=""):
+    """
+    Verify watermark extraction (keeping original signature).
+    """
     print("\n" + "=" * 80)
     print("WATERMARK EXTRACTION VERIFICATION")
     print("=" * 80)
     
-    # Load original watermark
     original_watermark = np.load(mark_path)
     
-    # Extract watermark from watermarked image (no attack)
-    extracted_watermark = extraction(original, watermarked, alpha=alpha, beta=beta)
+    # Extract without attack
+    extracted_watermark = extraction(original, watermarked, watermarked)
     
-    # Compute similarity
     sim = similarity(original_watermark, extracted_watermark)
     
-    # Bit statistics
     total_bits = len(original_watermark)
     matching_bits = np.sum(original_watermark == extracted_watermark)
     differing_bits = total_bits - matching_bits
     
-    # Bit pattern analysis
-    both_zero = np.sum((original_watermark == 0) & (extracted_watermark == 0))
-    both_one = np.sum((original_watermark == 1) & (extracted_watermark == 1))
-    orig_one_ext_zero = np.sum((original_watermark == 1) & (extracted_watermark == 0))
-    orig_zero_ext_one = np.sum((original_watermark == 0) & (extracted_watermark == 1))
-    
     print(f"\nExtraction Statistics:")
     print(f"  Total bits:        {total_bits}")
     print(f"  Matching bits:     {matching_bits} ({matching_bits/total_bits*100:.2f}%)")
-    print(f"  Differing bits:    {differing_bits} ({differing_bits/total_bits*100:.2f}%)")
     print(f"  Similarity:        {sim:.4f}")
     
-    print(f"\nBit Pattern Distribution:")
-    print(f"  Both 0:            {both_zero} ({both_zero/total_bits*100:.2f}%)")
-    print(f"  Both 1:            {both_one} ({both_one/total_bits*100:.2f}%)")
-    print(f"  Orig=1, Ext=0:     {orig_one_ext_zero} ({orig_one_ext_zero/total_bits*100:.2f}%)")
-    print(f"  Orig=0, Ext=1:     {orig_zero_ext_one} ({orig_zero_ext_one/total_bits*100:.2f}%)")
-    
-    # Hamming distance
-    hamming_dist = differing_bits
-    normalized_hamming = hamming_dist / total_bits
-    print(f"\nHamming Distance:  {hamming_dist}")
-    print(f"Normalized:        {normalized_hamming:.4f}")
-    
-    # Status
-    if sim >= 0.95:
-        status = "EXCELLENT"
-        status_symbol = "[OK]"
-        bbox_color = 'lightgreen'
-    elif sim >= 0.7:
-        status = "GOOD"
-        status_symbol = "[OK]"
-        bbox_color = 'lightblue'
-    elif sim >= 0.5:
-        status = "WARNING"
-        status_symbol = "[!]"
-        bbox_color = 'lightyellow'
-    else:
-        status = "ERROR"
-        status_symbol = "[X]"
-        bbox_color = 'lightcoral'
-    
-    print(f"\nExtraction Status: {status_symbol} {status}")
-    
-    # Prepare watermark visualizations
-    size = int(np.sqrt(total_bits))
-    wm_orig = original_watermark.reshape(size, size)
-    wm_extracted = extracted_watermark.reshape(size, size)
-    error_2d = (original_watermark != extracted_watermark).reshape(size, size).astype(float)
-    
-    # ========== PLOT 1: Overview (Watermarks + Images) ==========
-    fig1 = plt.figure(figsize=(18, 10))
-    gs1 = fig1.add_gridspec(2, 4, hspace=0.25, wspace=0.25)
-    
-    # Top row: Watermarks
-    ax1 = fig1.add_subplot(gs1[0, 0])
-    ax1.imshow(wm_orig, cmap='binary', vmin=0, vmax=1, interpolation='nearest')
-    ax1.set_title(f'Original Watermark\n{np.sum(original_watermark)} ones', fontsize=12, fontweight='bold')
-    ax1.axis('off')
-    
-    ax2 = fig1.add_subplot(gs1[0, 1])
-    ax2.imshow(wm_extracted, cmap='binary', vmin=0, vmax=1, interpolation='nearest')
-    ax2.set_title(f'Extracted Watermark\n{np.sum(extracted_watermark)} ones', fontsize=12, fontweight='bold')
-    ax2.axis('off')
-    
-    ax3 = fig1.add_subplot(gs1[0, 2])
-    im3 = ax3.imshow(error_2d, cmap='RdYlGn_r', interpolation='nearest', vmin=0, vmax=1)
-    ax3.set_title(f'Error Map\n{differing_bits} errors ({normalized_hamming*100:.1f}%)', fontsize=12, fontweight='bold')
-    ax3.axis('off')
-    cbar3 = plt.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04)
-    cbar3.set_label('Error', fontsize=10)
-    
-    # Confusion Matrix
-    ax4 = fig1.add_subplot(gs1[0, 3])
-    confusion = np.array([[both_zero, orig_zero_ext_one],
-                         [orig_one_ext_zero, both_one]])
-    im4 = ax4.imshow(confusion, cmap='Blues', aspect='auto')
-    ax4.set_xticks([0, 1])
-    ax4.set_yticks([0, 1])
-    ax4.set_xticklabels(['Extr: 0', 'Extr: 1'], fontsize=10)
-    ax4.set_yticklabels(['Orig: 0', 'Orig: 1'], fontsize=10)
-    ax4.set_title('Confusion Matrix', fontsize=12, fontweight='bold')
-    for i in range(2):
-        for j in range(2):
-            color = "white" if confusion[i, j] > confusion.max()/2 else "black"
-            ax4.text(j, i, f'{confusion[i, j]}\n({confusion[i, j]/total_bits*100:.1f}%)',
-                    ha="center", va="center", color=color, fontsize=10, fontweight='bold')
-    cbar4 = plt.colorbar(im4, ax=ax4, fraction=0.046, pad=0.04)
-    
-    # Bottom row: Images
-    ax5 = fig1.add_subplot(gs1[1, 0])
-    ax5.imshow(original, cmap='gray')
-    ax5.set_title('Original Image', fontsize=12, fontweight='bold')
-    ax5.axis('off')
-    
-    ax6 = fig1.add_subplot(gs1[1, 1])
-    ax6.imshow(watermarked, cmap='gray')
-    wpsnr_val = wpsnr(original, watermarked)
-    ax6.set_title(f'Watermarked Image\nWPSNR: {wpsnr_val:.2f} dB', fontsize=12, fontweight='bold')
-    ax6.axis('off')
-    
-    ax7 = fig1.add_subplot(gs1[1, 2])
-    diff_img = np.abs(watermarked.astype(float) - original.astype(float))
-    im7 = ax7.imshow(diff_img, cmap='hot')
-    ax7.set_title(f'Embedding Difference\nMax: {diff_img.max():.1f}', fontsize=12, fontweight='bold')
-    ax7.axis('off')
-    cbar7 = plt.colorbar(im7, ax=ax7, fraction=0.046, pad=0.04)
-    
-    # Statistics panel
-    ax8 = fig1.add_subplot(gs1[1, 3])
-    ax8.axis('off')
-    
-    stats_text = f"""QUALITY METRICS
-{'='*28}
-
-    Similarity:      {sim:.4f}
-    BER:             {normalized_hamming:.4f}
-    Hamming Dist:    {hamming_dist}
-
-    MATCHING BITS:   {matching_bits:4d}
-    Both 0:        {both_zero:4d}
-    Both 1:        {both_one:4d}
-
-    ERROR BITS:      {differing_bits:4d}
-    False Pos:     {orig_zero_ext_one:4d}
-    False Neg:     {orig_one_ext_zero:4d}
-
-    PARAMETERS
-    Alpha (LH/HL):   {alpha:.2f}
-    Beta (LL):       {beta:.2f}
-
-    STATUS:          {status}
-"""
-    
-    ax8.text(0.05, 0.95, stats_text, transform=ax8.transAxes,
-             fontsize=10, verticalalignment='top', fontfamily='monospace',
-             bbox=dict(boxstyle='round', facecolor=bbox_color, alpha=0.4, edgecolor='black', linewidth=1.5))
-    
-    fig1.suptitle(f'Watermark Extraction Verification | Similarity: {sim:.4f} | Status: {status}', 
-                  fontsize=16, fontweight='bold', y=0.98)
-    
-    output_path1 = os.path.join("./", f"{output_prefix}extraction_overview.png")
-    plt.savefig(output_path1, dpi=200, bbox_inches='tight', facecolor='white', edgecolor='none')
-    print(f"\nSaved overview plot to: {output_path1}")
-    plt.close(fig1)
-    
+    status = "EXCELLENT" if sim >= 0.95 else "GOOD" if sim >= 0.7 else "WARNING" if sim >= 0.5 else "ERROR"
+    print(f"\nExtraction Status: {status}")
     print("=" * 80 + "\n")
     
     return {
         'similarity': sim,
         'matching_bits': matching_bits,
         'differing_bits': differing_bits,
-        'hamming_distance': hamming_dist,
         'status': status,
         'original_watermark': original_watermark,
         'extracted_watermark': extracted_watermark
