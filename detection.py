@@ -175,11 +175,13 @@ def extract_singular_values(original_image, attacked_image, blocks, block_size, 
     extracted_S = np.zeros(32)
     counts = np.zeros(32)
     
+    print(f"Location in detection")
     for idx, block_info in enumerate(blocks):
-        if idx >= 32:  # Only use first 32 blocks
-            break
+        # if idx >= 32:  # Only use first 32 blocks
+        #     break
             
         x, y = block_info['locations']
+        print(f"x: {x}, y:{y}")
         
         # Extract from attacked image
         block_attacked = attacked_image[x:x + block_size, y:y + block_size]
@@ -201,10 +203,11 @@ def extract_singular_values(original_image, attacked_image, blocks, block_size, 
         start_idx = idx * n_values
         end_idx = start_idx + n_values
         
-        if end_idx <= 32:
-            extracted_S[start_idx:end_idx] += abs(S_diff)
-            counts[start_idx:end_idx] += 1
-
+        # if end_idx <= 32:
+        #     extracted_S[start_idx:end_idx] += abs(S_diff)
+        #     counts[start_idx:end_idx] += 1
+        extracted_S[start_idx:end_idx] += abs(S_diff)
+        counts[start_idx:end_idx] += 1
 
     # Average where multiple extractions occurred
     mask = counts > 0
@@ -222,7 +225,7 @@ def extraction(original_image, watermarked_image, attacked_image):
         BLOCK_SIZE
     )
 
-    attacked_image -= binary_mask.astype(np.uint8)
+    # attacked_image -= binary_mask.astype(np.uint8) # do not understand
 
     # Extract singular values from each block
     extracted_S = extract_singular_values(
@@ -287,7 +290,7 @@ def compute_threshold(mark_size, w, N=1000):
 
 
 
-def verify_watermark_extraction(original, watermarked, alpha, mark_path, dwt_level=1, output_prefix=""):
+def verify_watermark_extraction(original, watermarked, attacked, alpha, mark_path, dwt_level=1, output_prefix=""):
     """Verify that the embedded watermark can be correctly extracted."""
     print("\n" + "=" * 80)
     print("WATERMARK EXTRACTION VERIFICATION")
@@ -505,6 +508,55 @@ def verify_watermark_extraction(original, watermarked, alpha, mark_path, dwt_lev
     )
     print(f"\nSaved overview plot to: {output_path1}")
     plt.close(fig1)
+
+    # --- Block mask visualization ---
+    # Identify blocks where watermark was embedded (from embedding)
+    blocks_embedded, mask_embedded = identify_watermarked_blocks(
+        original, watermarked, watermarked, BLOCK_SIZE
+    )
+    # Identify blocks detected as watermarked (from extraction)
+    blocks_detected, mask_detected = identify_watermarked_blocks(
+        original, watermarked, attacked, BLOCK_SIZE
+    )
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.imshow(original, cmap="gray")
+    ax.set_title("Watermark Block Locations", fontsize=16, fontweight="bold")
+    ax.axis("off")
+
+    embedded_set = set([tuple(b['locations']) for b in blocks_embedded])
+    detected_set = set([tuple(b['locations']) for b in blocks_detected])
+
+    for loc in embedded_set:
+        if loc in detected_set:
+            # Overlap: green border
+            rect = plt.Rectangle((loc[1], loc[0]), BLOCK_SIZE, BLOCK_SIZE, linewidth=2.5, edgecolor='green', facecolor='none', label='Embedded & Detected')
+            ax.add_patch(rect)
+        else:
+            # Embedded only: blue border
+            rect = plt.Rectangle((loc[1], loc[0]), BLOCK_SIZE, BLOCK_SIZE, linewidth=2, edgecolor='blue', facecolor='none', label='Embedded Block')
+            ax.add_patch(rect)
+
+    for loc in detected_set:
+        if loc not in embedded_set:
+            # Detected only: orange border
+            rect = plt.Rectangle((loc[1], loc[0]), BLOCK_SIZE, BLOCK_SIZE, linewidth=2, edgecolor='orange', facecolor='none', label='Detected Block')
+            ax.add_patch(rect)
+
+    # Custom legend
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(edgecolor='blue', facecolor='none', label='Embedded Block', linewidth=2),
+        Patch(edgecolor='orange', facecolor='none', label='Detected Block', linewidth=2),
+        Patch(edgecolor='green', facecolor='none', label='Embedded & Detected', linewidth=2.5)
+    ]
+    ax.legend(handles=legend_elements, loc='upper right', fontsize=12, frameon=True)
+
+    plt.tight_layout()
+    output_path2 = os.path.join("./", f"{output_prefix}block_mask_overlay.png")
+    plt.savefig(output_path2, dpi=300, bbox_inches="tight", facecolor="white", edgecolor="none")
+    plt.close(fig)
+
 
     print("=" * 80 + "\n")
 

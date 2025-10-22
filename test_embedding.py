@@ -20,7 +20,7 @@ def main():
     # =================================================================
     #                       IMAGE GENERATION
     # =================================================================
-    image_index = "0010"
+    image_index = "0002"
     print(f"Image: {image_index}")
     
     # embedding() signature: (original_image_path, watermark_path, alpha, dwt_level)
@@ -46,6 +46,7 @@ def main():
     extraction_results = verify_watermark_extraction(
         original, 
         watermarked, 
+        watermarked,
         alpha, 
         mark_path
     )

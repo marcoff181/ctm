@@ -182,8 +182,10 @@ def embedding(original_image_path, watermark_path, alpha, dwt_level):
     binary_mask = np.zeros_like(image, dtype=np.float64)
 
     # Embed watermark in selected blocks
+    print(f"Location in embedding:")
     for idx, block_info in enumerate(selected_blocks):
         block_x, block_y = block_info['locations']
+        print(f"x:{block_x}, y:{block_y}")
         block = image[block_x:block_x + BLOCK_SIZE, block_y:block_y + BLOCK_SIZE]
 
         # DWT and SVD
