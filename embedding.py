@@ -16,8 +16,8 @@ from wpsnr import wpsnr
 ALPHA = 5.0
 BLOCKS_TO_EMBED = 32
 BLOCK_SIZE = 4
-BRIGHTNESS_WEIGHT = 0.33 # 0: no spatial domain, 1: only spatial domain
-ATTACK_WEIGHT = 1.0 - BRIGHTNESS_WEIGHT
+# BRIGHTNESS_WEIGHT = 0.33 # 0: no spatial domain, 1: only spatial domain
+# ATTACK_WEIGHT = 1.0 - BRIGHTNESS_WEIGHT
 BRIGHTNESS_THRESHOLD = 230
 DARKNESS_THRESHOLD = 10
 
@@ -56,38 +56,25 @@ def attack_strength_map(original_image):
 def select_best_blocks(original_image, strength_map, n_blocks,  block_size):
     """Select best blocks based on how much they are attacked by using `strength_map`"""
 
-    selected_blocks_tmp = []
+    blocks = []
 
     for i in range(0, original_image.shape[0], block_size):
         for j in range(0, original_image.shape[1], block_size):
             block = original_image[i:i + block_size, j:j + block_size]
             avg_brightness = np.average(block)
-            if DARKNESS_THRESHOLD < avg_brightness < BRIGHTNESS_THRESHOLD:
-                block_tmp = {
-                    'locations': (i,j),
-                    # 'avg_brightness': avg_brightness,
-                    'attack_value': np.average(strength_map[i:i + block_size, j:j + block_size])
-                }
-                selected_blocks_tmp.append(block_tmp)
+            # if DARKNESS_THRESHOLD < avg_brightness < BRIGHTNESS_THRESHOLD:
+            block_tmp = {
+                'locations': (i,j),
+                # 'avg_brightness': avg_brightness,
+                'attack_value': np.average(strength_map[i:i + block_size, j:j + block_size])
+            }
+            blocks.append(block_tmp)
 
-    # sort blocks by attack strength
-    selected_blocks_tmp = sorted(selected_blocks_tmp, key=lambda k: k['attack_value'], reverse=False)
-
-    for i in range(len(selected_blocks_tmp)):
-        selected_blocks_tmp[i]['merit'] = i*ATTACK_WEIGHT
-    
-    # 3. In the end we select the blocks with the highest merit
-    selected_blocks_tmp = sorted(selected_blocks_tmp, key=lambda k: k['merit'], reverse=True)
-
-    selected_blocks = []
-    for i in range(n_blocks):
-        tmp = selected_blocks_tmp.pop()
-        selected_blocks.append(tmp)
+    # select first 32 blocks with lower attack strength
+    blocks = sorted(blocks, key=lambda k: k['attack_value'])[:n_blocks]
         
-    selected_blocks = sorted(selected_blocks, key=lambda k: k['locations'], reverse=False)
-
-    return selected_blocks
-
+    # order blocks based on their location, so they can be retrieved in a deterministic order
+    return sorted(blocks, key=lambda k: k['locations'])
 
 def embedding(original_image_path, watermark_path, alpha, dwt_level):
     """Embed watermark using DWT-SVD with block selection."""
