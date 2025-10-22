@@ -6,6 +6,8 @@ import os
 from matplotlib import pyplot as plt
 from scipy.ndimage.filters import gaussian_filter
 from scipy.signal import medfilt
+from skimage.transform import rescale
+from PIL import Image
 
 from wpsnr import wpsnr
 
@@ -27,39 +29,51 @@ def get_watermark_svd(watermark_path):
     return watermark, U, S, V
 
 #------- DUE TO SLEF CONTAINED NATURE ------------------
-def jpeg_compression(img, QF):
-    cv2.imwrite('tmp.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), QF])
-    attacked = cv2.imread('tmp.jpg', 0)
-    os.remove('tmp.jpg')
-    return attacked
+def awgn(img, std=5.0):
+    np.random.seed(123)
+    noise = np.random.normal(0, std, img.shape)
+    return np.clip(img + noise, 0, 255).astype(np.uint8)
 
-def blur(img, sigma):
-    attacked = gaussian_filter(img, sigma)
-    return attacked
 
-def awgn(img, std, seed):
-    mean = 0.0
-    # np.random.seed(seed)
-    attacked = img + np.random.normal(mean, std, img.shape)
-    attacked = np.clip(attacked, 0, 255)
-    return attacked
+def blur(img, sigma=3.0):
+    result = gaussian_filter(img, sigma)
+    return np.clip(result, 0, 255).astype(np.uint8)
 
-def sharpening(img, sigma, alpha):
-    filter_blurred_f = gaussian_filter(img, sigma)
-    attacked = img + alpha * (img - filter_blurred_f)
-    return attacked
 
-def median(img, kernel_size):
-    attacked = medfilt(img, kernel_size)
-    return attacked
+def sharpening(img, sigma=1.0, alpha=1.5):
+    blurred = gaussian_filter(img, sigma)
+    result = img + alpha * (img - blurred)
+    return np.clip(result, 0, 255).astype(np.uint8)
 
-def resizing(img, scale):
-  from skimage.transform import rescale
-  x, y = img.shape
-  attacked = rescale(img, scale)
-  attacked = rescale(attacked, 1/scale)
-  attacked = attacked[:x, :y]
-  return attacked
+
+def median(img, kernel_size=3):
+    result = medfilt(img, kernel_size)
+    return result.astype(np.uint8)
+
+
+def resizing(img, scale=0.9):
+    h, w = img.shape
+    downscaled = rescale(img, scale, anti_aliasing=True)
+    upscaled = rescale(downscaled, 1/scale, anti_aliasing=True)
+    
+    upscaled_h, upscaled_w = upscaled.shape
+    if upscaled_h >= h and upscaled_w >= w:
+        result = upscaled[:h, :w]
+    else:
+        result = np.zeros((h, w))
+        result[:upscaled_h, :upscaled_w] = upscaled
+    
+    return np.clip(result * 255, 0, 255).astype(np.uint8)
+
+
+def jpeg_compression(img, quality=70):
+    temp_path = 'tmp.jpg'
+    img_pil = Image.fromarray(img)
+    img_pil.save(temp_path, "JPEG", quality=quality)
+    result = Image.open(temp_path)
+    result_array = np.asarray(result, dtype=np.uint8)
+    os.remove(temp_path)
+    return result_array
 
 #------- DUE TO SLEF CONTAINED NATURE ------------------
 
