@@ -77,6 +77,8 @@ def jpeg_compression(img, quality=70):
 
 #------- DUE TO SLEF CONTAINED NATURE ------------------
 
+# TODO: instead of import copy function here
+from attack import bin_search_attack
 
 def attack_image(original_image):
     """
@@ -84,55 +86,13 @@ def attack_image(original_image):
     For each attack, finds the parameter that maximizes the difference while keeping the image valid.
     Resizes attacked images back to original shape if needed.
     """
-    blank_image = np.zeros_like(original_image, dtype=np.float64)
-
-    param_converters = {
-        "JPEG": lambda x: int(round((1 - x) * 100)),
-        "Blur": lambda x: x * 10,
-        "AWGN": lambda x: x * 50,
-        "Resize": lambda x: max(0.001, 0.5 ** (x * 10)),
-        "Median": lambda x: [1, 3, 5, 7][int(round(x * 3))],
-        "Sharp": lambda x: x * 3,
-    }
-
-    attack_config = {
-        "JPEG": lambda img, x: jpeg_compression(img, quality=param_converters["JPEG"](x)),
-        "Blur": lambda img, x: blur(img, sigma=param_converters["Blur"](x)),
-        "AWGN": lambda img, x: awgn(img, std=param_converters["AWGN"](x)),
-        "Resize": lambda img, x: resizing(img, scale=param_converters["Resize"](x)),
-        "Median": lambda img, x: median(img, kernel_size=param_converters["Median"](x)),
-        "Sharp": lambda img, x: sharpening(img, sigma=1.0, alpha=param_converters["Sharp"](x)),
-    }
+    blank_image = np.zeros((512, 512), dtype=np.uint8)
 
     start = time.time()
-    for attack_name, attack_func in attack_config.items():
-        low, high = 0.0, 1.0
-        best_param = 0.0
-        best_diff = -np.inf
-        iterations = 8
-        for _ in range(iterations):
-            mid = (low + high) / 2
-            try:
-                attacked = attack_func(original_image, mid)
-                # Resize if needed
-                if attacked.shape != original_image.shape:
-                    attacked = cv2.resize(attacked, (original_image.shape[1], original_image.shape[0]))
-                diff = np.sum(np.abs(attacked.astype(np.float64) - original_image))
-                if diff > best_diff:
-                    best_diff = diff
-                    best_param = mid
-                low = mid
-            except Exception as e:
-                print(f"[ATTACK] Error in {attack_name} with param {mid:.2f}: {e}")
-                break
-        # Apply best attack found
-        try:
-            attacked = attack_func(original_image, best_param)
-            if attacked.shape != original_image.shape:
-                attacked = cv2.resize(attacked, (original_image.shape[1], original_image.shape[0]))
-            blank_image += np.abs(attacked.astype(np.float64) - original_image)
-        except Exception as e:
-            print(f"[ATTACK] Final error in {attack_name} with param {best_param:.2f}: {e}")
+    # these are the attacks that manage to get the wpsnr as close as 35 though, might want to change that
+    best_attacks = bin_search_attack(blank_image,blank_image,lambda a,b,c : (1,wpsnr(b,c)), np.ones((512, 512), dtype=np.uint8),4)
+    for attacked in best_attacks:
+        blank_image += np.abs(attacked.astype(np.float64) - original_image)
 
     end = time.time()
     print(f"[EMBEDDING] Intelligent Attack Phase (binary search) duration: {end - start:.2f}s")

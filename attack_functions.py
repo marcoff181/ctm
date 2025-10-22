@@ -2,7 +2,7 @@ import os
 import numpy as np
 from PIL import Image
 from scipy.ndimage import gaussian_filter
-from scipy.signal import medfilt
+from scipy.signal import medfilt2d
 from skimage.transform import rescale
 
 def awgn(img, std=5.0):
@@ -23,7 +23,7 @@ def sharpening(img, sigma=1.0, alpha=1.5):
 
 
 def median(img, kernel_size=3):
-    result = medfilt(img, kernel_size)
+    result = medfilt2d(img, kernel_size)
     return result.astype(np.uint8)
 
 

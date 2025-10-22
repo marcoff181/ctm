@@ -14,7 +14,7 @@ from utilities import edges_mask, noisy_mask
 from attack import attack_config, param_converters
 attacked_wpsnr_lower_bound = 35
 
-def study_attack_parameter_ranges(images_dir="./images/", num_images=1, alpha_steps=20):
+def study_attack_parameter_ranges(images_dir="./images/", num_images=1, alpha_steps=200):
     print("--- Starting Attack Parameter Range Study ---")
     
     # Validate the images directory and load image paths
@@ -170,3 +170,7 @@ def visualize_attack_combination(original, watermarked, detection, grid_size=20)
     plt.show()
 
     return pd.DataFrame(results)
+
+if __name__ == "__main__":
+    study_attack_parameter_ranges()
+    

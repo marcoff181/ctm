@@ -24,12 +24,12 @@ attacked_wpsnr_lower_bound = 35
 # conversion between the input value 0.0..1.0 and the actual parameters of each attack function
 param_converters = {
     "JPEG": lambda x: int(round((1 - x) * 100)),
-    "Blur": lambda x: x * 1.4,
+    "Blur": lambda x: (x+0.15) * 1.2,
     "AWGN": lambda x: x * 30,
     # pick closest number that is divisible by 512 so that when upscaling we come back to the same image size
     "Resize": lambda x:  np.round(((1-x)+0.4) * 512)/512,
-    "Median": lambda x: [1, 3, 5][int(round(x * 2))],
-    "Sharp": lambda x: x * 0.1,
+    "Median": lambda x: [[1,3], [3,1], [3,3], [3,5], [5,3]][int(round(x * 4))],
+    "Sharp": lambda x: (x * 0.07)+0.035,
 }
 
 # attacks that take as input a strenght value `x` between 0.0 and 1.0
@@ -50,6 +50,7 @@ detection_functions = {
 # TODO: tweak iterations to find balance between speed and accuracy
 def bin_search_attack(original, watermarked, detection, mask, iterations):
     results = []
+    best_attacks = []
 
     for attack_name, attack_func in attack_config.items():
         low, high = 0.0, 1.0
@@ -75,6 +76,10 @@ def bin_search_attack(original, watermarked, detection, mask, iterations):
             else:
                 low = mid
 
+        if best_attacked is not None:
+            best_attacks.append(best_attacked)
+
+
         if best_param is not None:
             actual_param = param_converters[attack_name](best_param)
             print(
@@ -98,6 +103,8 @@ def bin_search_attack(original, watermarked, detection, mask, iterations):
                     "Status": "Not Removed",
                 }
             )
+    return best_attacks
+
     return pd.DataFrame(results)
 
 # def double_bin_search_attack(original, watermarked, detection, mask, iterations):
@@ -198,12 +205,12 @@ def full_attack(detection_functions):
         print("\nBinary search with no mask...")
         mask = original >= 0
         res = bin_search_attack(original, watermarked, det_fun, mask, bin_search_iterations)
-        print(f"\nResults:\n{res.to_string()}\n")
+        # print(f"\nResults:\n{res}\n")
 
         print("Binary search with edges mask...")
         emask = edges_mask(original)
         res = bin_search_attack(original, watermarked, det_fun, emask, bin_search_iterations)
-        print(f"\nResults:\n{res.to_string()}\n")
+        # print(f"\nResults:\n{res}\n")
 
         print("Binary search with noisy mask...")
         nmask = noisy_mask(original)
