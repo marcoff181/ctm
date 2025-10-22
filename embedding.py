@@ -30,7 +30,7 @@ def get_watermark_svd(watermark_path):
 
 
 # TODO: instead of import copy function here
-from attack import attack_config, param_converters
+from attack import attack_config
 
 def attack_strength_map(original_image):
     strength_map = np.zeros((512, 512), dtype=np.uint64)
@@ -41,17 +41,15 @@ def attack_strength_map(original_image):
 
     # evenly sample attacks and find out where they affect the original image the most
     for name,attack in attack_config.items():
-        if name == 'AWGN':
-            continue
         for x in attack_range:
             attacked = attack(original_image.copy(),x)
             diff = attacked - original_image 
             strength_map +=  diff
-            cv2.imwrite(f"./attack_diffs/embedding_attack_tests_{name}_{x}.bmp",diff)
+            # cv2.imwrite(f"./attack_diffs/embedding_attack_tests_{name}_{x}.bmp",diff)
 
     #divide by n_of_attacks to get back to the uint8 scale
     strength_map = np.astype(strength_map/n_of_attacks,np.uint8)
-    cv2.imwrite(f"./attack_diffs/embedding_attack_tests_ sum2.bmp",strength_map)
+    cv2.imwrite(f"./attack_diffs/embedding_attack_tests_sum.bmp",strength_map)
 
     # TODO: decide if the output format is correct
     return strength_map
@@ -127,10 +125,10 @@ def embedding(original_image_path, watermark_path, alpha, dwt_level):
     start = time.time()
 
     # Compute attack resistance map
-    attacked_image = attack_strength_map(image)
+    strength_map = attack_strength_map(image)
 
     # Select best blocks
-    selected_blocks = select_best_blocks(image, attacked_image, BLOCKS_TO_EMBED, BLOCK_SIZE)
+    selected_blocks = select_best_blocks(image, strength_map, BLOCKS_TO_EMBED, BLOCK_SIZE)
 
     n_blocks_in_image = image.shape[0] / BLOCK_SIZE # 512 / 4 = 128
     shape_LL_tmp = np.uint8(np.floor(image.shape[0] / (2*n_blocks_in_image))) # 512 / 256 = 2 
