@@ -28,79 +28,33 @@ def get_watermark_svd(watermark_path):
     U, S, V = np.linalg.svd(watermark_matrix, full_matrices=False)
     return watermark, U, S, V
 
-#------- DUE TO SLEF CONTAINED NATURE ------------------
-def awgn(img, std=5.0):
-    np.random.seed(123)
-    noise = np.random.normal(0, std, img.shape)
-    return np.clip(img + noise, 0, 255).astype(np.uint8)
-
-
-def blur(img, sigma=3.0):
-    result = gaussian_filter(img, sigma)
-    return np.clip(result, 0, 255).astype(np.uint8)
-
-
-def sharpening(img, sigma=1.0, alpha=1.5):
-    blurred = gaussian_filter(img, sigma)
-    result = img + alpha * (img - blurred)
-    return np.clip(result, 0, 255).astype(np.uint8)
-
-
-def median(img, kernel_size=3):
-    result = medfilt(img, kernel_size)
-    return result.astype(np.uint8)
-
-
-def resizing(img, scale=0.9):
-    h, w = img.shape
-    downscaled = rescale(img, scale, anti_aliasing=True)
-    upscaled = rescale(downscaled, 1/scale, anti_aliasing=True)
-    
-    upscaled_h, upscaled_w = upscaled.shape
-    if upscaled_h >= h and upscaled_w >= w:
-        result = upscaled[:h, :w]
-    else:
-        result = np.zeros((h, w))
-        result[:upscaled_h, :upscaled_w] = upscaled
-    
-    return np.clip(result * 255, 0, 255).astype(np.uint8)
-
-
-def jpeg_compression(img, quality=70):
-    temp_path = 'tmp.jpg'
-    img_pil = Image.fromarray(img)
-    img_pil.save(temp_path, "JPEG", quality=quality)
-    result = Image.open(temp_path)
-    result_array = np.asarray(result, dtype=np.uint8)
-    os.remove(temp_path)
-    return result_array
-
-#------- DUE TO SLEF CONTAINED NATURE ------------------
 
 # TODO: instead of import copy function here
-from attack import bin_search_attack
+from attack import attack_config, param_converters
 
-def attack_image(original_image):
-    """
-    Intelligent attack phase: uses binary search to find the most effective attack parameters.
-    For each attack, finds the parameter that maximizes the difference while keeping the image valid.
-    Resizes attacked images back to original shape if needed.
-    """
-    blank_image = np.zeros((512, 512), dtype=np.uint8)
+def attack_strength_map(original_image):
+    strength_map = np.zeros((512, 512), dtype=np.uint64)
 
-    blank_image_path = f"./tmp_attacks/blank_image.bmp"
-    cv2.imwrite(blank_image_path,blank_image)
+    steps= 10
+    attack_range =np.linspace(0.0,1.0,steps) 
+    n_of_attacks = len(attack_config) * steps
 
-    start = time.time()
-    # these are the attacks that manage to get the wpsnr as close as 35 though, might want to change that
-    best_attacks = bin_search_attack(blank_image_path,blank_image_path,lambda a,b,c : (1,wpsnr(cv2.imread(a,0),cv2.imread(a,0))), np.ones((512, 512), dtype=np.uint8),4)
-    for attacked in best_attacks:
-        blank_image += np.abs(attacked.astype(np.float64) - original_image)
+    # evenly sample attacks and find out where they affect the original image the most
+    for name,attack in attack_config.items():
+        if name == 'AWGN':
+            continue
+        for x in attack_range:
+            attacked = attack(original_image.copy(),x)
+            diff = attacked - original_image 
+            strength_map +=  diff
+            cv2.imwrite(f"./attack_diffs/embedding_attack_tests_{name}_{x}.bmp",diff)
 
-    end = time.time()
-    print(f"[EMBEDDING] Intelligent Attack Phase (binary search) duration: {end - start:.2f}s")
+    #divide by n_of_attacks to get back to the uint8 scale
+    strength_map = np.astype(strength_map/n_of_attacks,np.uint8)
+    cv2.imwrite(f"./attack_diffs/embedding_attack_tests_ sum2.bmp",strength_map)
 
-    return blank_image
+    # TODO: decide if the output format is correct
+    return strength_map
 
 def IsTooBrightorTooDark(block):
     mean_val = np.mean(block)
@@ -173,7 +127,7 @@ def embedding(original_image_path, watermark_path, alpha, dwt_level):
     start = time.time()
 
     # Compute attack resistance map
-    attacked_image = attack_image(image)
+    attacked_image = attack_strength_map(image)
 
     # Select best blocks
     selected_blocks = select_best_blocks(image, attacked_image, BLOCKS_TO_EMBED, BLOCK_SIZE)
