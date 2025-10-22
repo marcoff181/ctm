@@ -23,12 +23,12 @@ attacked_wpsnr_lower_bound = 35
 # conversion between the input value 0.0..1.0 and the actual parameters of each attack function
 param_converters = {
     "JPEG": lambda x: int(round((1 - x) * 100)),
-    "Blur": lambda x: x * 1.4,
+    "Blur": lambda x: (x+0.15) * 1.2,
     "AWGN": lambda x: x * 30,
     # pick closest number that is divisible by 512 so that when upscaling we come back to the same image size
     "Resize": lambda x:  np.round(((1-x)+0.4) * 512)/512,
     "Median": lambda x: [[1,3], [3,1], [3,3], [3,5], [5,3]][int(round(x * 4))],
-    "Sharp": lambda x: x * 0.1,
+    "Sharp": lambda x: (x * 0.07)+0.035,
 }
 
 # attacks that take as input a strenght value `x` between 0.0 and 1.0
