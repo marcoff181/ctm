@@ -58,7 +58,7 @@ def IsTooBrightorTooDark(block):
     mean_val = np.mean(block)
     return DARKNESS_THRESHOLD < mean_val < BRIGHTNESS_THRESHOLD
 
-def select_best_blocks(original_image, attacked_image, n_blocks,  block_size):
+def select_best_blocks(original_image, strength_map, n_blocks,  block_size):
     """
     Select best blocks based on edge content.
     
@@ -84,7 +84,7 @@ def select_best_blocks(original_image, attacked_image, n_blocks,  block_size):
                 block_tmp = {
                     'locations': (i,j),
                     'spatial_value': spatial_value,
-                    'attack_value': np.average(attacked_image[i:i + block_size, j:j + block_size])
+                    'attack_value': np.average(strength_map[i:i + block_size, j:j + block_size])
                 }
                 selected_blocks_tmp.append(block_tmp)
     
@@ -107,7 +107,7 @@ def select_best_blocks(original_image, attacked_image, n_blocks,  block_size):
     for i in range(n_blocks):
         tmp = selected_blocks_tmp.pop()
         selected_blocks.append(tmp)
-        attacked_image[tmp['locations'][0]:tmp['locations'][0] + BLOCK_SIZE,
+        strength_map[tmp['locations'][0]:tmp['locations'][0] + BLOCK_SIZE,
                         tmp['locations'][1]:tmp['locations'][1] + BLOCK_SIZE] = 1
         
     selected_blocks = sorted(selected_blocks, key=lambda k: k['locations'], reverse=False)
