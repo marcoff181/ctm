@@ -15,8 +15,10 @@ from attack import attack_config
 from wpsnr import wpsnr
 
 # embedded parameters:
-ALPHA = 5.0
-BLOCKS_TO_EMBED = 32
+ALPHA = 20.0
+BLOCKS_TO_EMBED = 100 
+SV_IMPORTANCE = [19, 6, 6, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 ,1]
+INDEX_TO_SV = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12, 12, 13, 13, 13, 14, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]
 BLOCK_SIZE = 4
 # BRIGHTNESS_THRESHOLD = 230
 # DARKNESS_THRESHOLD = 10
@@ -35,7 +37,6 @@ def attack_strength_map(original_image):
     steps= 10
     attack_range =np.linspace(0.0,1.0,steps) 
     n_of_attacks = len(attack_config) * steps
-
  
     for attack in attack_config.values():
         for x in attack_range:
@@ -80,10 +81,48 @@ def embedding(image_path, watermark_path, alpha, dwt_level):
     image = cv2.imread(image_path, 0)
     Swm = get_watermark_S(watermark_path)
 
+    # ===========================================
+    # MESS/AI SLOP CONTAINMENT ZONE
+    # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
     # TODO: try more attempts at using normalization to remove huge first watermark
-    # Swm = ((Swm - 0.1) / (15 - 0.1)) + 1 # Normalization step
+    # np.set_printoptions(precision=2, suppress=True, floatmode='fixed')
     # print(Swm)
+    # Swmboh = ((Swm - 0.1) / (15 - 0.1)) # Normalization step
+    # print(Swmboh)
+    #
+    # info = (Swm**2) / np.sum(Swm**2)
+    # for i, val in enumerate(info):
+    #     print(f"Singular value {i+1}: {val*100:.2f}% of total energy")
     # print(Swm*100)
+    # Normalize and scale to 100 slots
+
+    # proportions = Swm / Swm.sum()
+    # slots_float = proportions * 100
+    #
+    # # Round down to get integer parts
+    # slots = np.floor(slots_float).astype(int)
+    #
+    # # Distribute leftover slots (due to rounding)
+    # leftover = int(100 - slots.sum())
+    #
+    # # Distribute the remaining slots to the largest fractional parts
+    # fractional_parts = slots_float - slots
+    # extra_indices = np.argsort(fractional_parts)[-leftover:]  # take top 'leftover' indices
+    # slots[extra_indices] += 1
+
+
+
+    # for i,sval in enumerate(Swm):
+    #     print(f"val: {sval} div:{sval/slots[i]}")
+    #
+    # # Now slots[i] tells you how many "embedding slots" to assign to singular value i
+    # print("Slots per singular value:")
+    # print(slots)
+
+    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    # MESS/AI SLOP CONTAINMENT ZONE END
+    # ===========================================
 
     strength_map = attack_strength_map(image)
 
@@ -105,8 +144,10 @@ def embedding(image_path, watermark_path, alpha, dwt_level):
         # wm_end = wm_start + shape_LL_tmp
         # print(f"wm_start: {wm_start}, wm_end: {wm_end}, len(Swm): {len(Swm)}")
 
-        #TODO: Need to change the logic if we want more than 32 blocks
-        Sb[0] += Swm[idx] * ALPHA
+        Sw_index = INDEX_TO_SV[idx]
+        Sw_strength = SV_IMPORTANCE[Sw_index]
+
+        Sb[0] += Swm[Sw_index] * (1/Sw_strength) * ALPHA
         LLnew = Ub.dot(np.diag(Sb)).dot(Vb)
         coeffs[0] = LLnew
         block_watermarked = pywt.waverec2(coeffs, wavelet='haar')
