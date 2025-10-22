@@ -9,7 +9,7 @@ from wpsnr import wpsnr
 import attack
 
 def main():
-    alpha = 5.11  # Match the ALPHA constant in embedding.py
+    alpha = 0.5  # Match the ALPHA constant in embedding.py
     mark_path = "crispymcmark.npy"
 
     print("===============================================")

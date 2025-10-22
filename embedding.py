@@ -13,7 +13,7 @@ from wpsnr import wpsnr
 
 
 # embedded paramters:
-ALPHA = 5.11
+ALPHA = 0.5
 BLOCKS_TO_EMBED = 32
 BLOCK_SIZE = 4
 SPATIAL_WEIGHT = 0.33 # 0: no spatial domain, 1: only spatial domain
@@ -88,9 +88,12 @@ def attack_image(original_image):
     """
     blank_image = np.zeros((512, 512), dtype=np.uint8)
 
+    blank_image_path = f"./tmp_attacks/blank_image.bmp"
+    cv2.imwrite(blank_image_path,blank_image)
+
     start = time.time()
     # these are the attacks that manage to get the wpsnr as close as 35 though, might want to change that
-    best_attacks = bin_search_attack(blank_image,blank_image,lambda a,b,c : (1,wpsnr(b,c)), np.ones((512, 512), dtype=np.uint8),4)
+    best_attacks = bin_search_attack(blank_image_path,blank_image_path,lambda a,b,c : (1,wpsnr(cv2.imread(a,0),cv2.imread(a,0))), np.ones((512, 512), dtype=np.uint8),4)
     for attacked in best_attacks:
         blank_image += np.abs(attacked.astype(np.float64) - original_image)
 
@@ -109,6 +112,7 @@ def select_best_blocks(original_image, attacked_image, n_blocks,  block_size):
     
     Args:
         image: Input grayscale image
+        attacked image: the blanked image attacked
         n_blocks: Number of blocks to select
         block_size: Size of each block (4x4 for better LL subband size)
     
@@ -174,18 +178,18 @@ def embedding(original_image_path, watermark_path, alpha, dwt_level):
     # Select best blocks
     selected_blocks = select_best_blocks(image, attacked_image, BLOCKS_TO_EMBED, BLOCK_SIZE)
 
-    n_blocks_in_image = image.shape[0] / BLOCK_SIZE
-    shape_LL_tmp = np.uint8(np.floor(image.shape[0] / (2*n_blocks_in_image))) 
+    n_blocks_in_image = image.shape[0] / BLOCK_SIZE # 512 / 4 = 128
+    shape_LL_tmp = np.uint8(np.floor(image.shape[0] / (2*n_blocks_in_image))) # 512 / 256 = 2 
     
     # Prepare output images
     watermarked_image = image.astype(np.float64)
     binary_mask = np.zeros_like(image, dtype=np.float64)
 
     # Embed watermark in selected blocks
-    print(f"Location in embedding:")
+    # print(f"Location in embedding:")
     for idx, block_info in enumerate(selected_blocks):
         block_x, block_y = block_info['locations']
-        print(f"x:{block_x}, y:{block_y}")
+        # print(f"x:{block_x}, y:{block_y}")
         block = image[block_x:block_x + BLOCK_SIZE, block_y:block_y + BLOCK_SIZE]
 
         # DWT and SVD
@@ -200,7 +204,7 @@ def embedding(original_image_path, watermark_path, alpha, dwt_level):
 
         if wm_end <= len(Swm):
             S_new += Swm[wm_start:wm_end] * alpha
-            LL_new = U @ np.diag(S_new) @ V
+            LL_new = U.dot(np.diag(S_new)).dot(V)
             coeffs[0] = LL_new
             block_watermarked = pywt.waverec2(coeffs, wavelet='haar')
 
@@ -210,9 +214,9 @@ def embedding(original_image_path, watermark_path, alpha, dwt_level):
 
     # Finalize watermarked image
     watermarked_image = np.clip(watermarked_image, 0, 255).astype(np.uint8)
-    difference = (-watermarked_image + image) * binary_mask.astype(np.uint8)
-    watermarked_image = image + difference
-    watermarked_image += binary_mask.astype(np.uint8)
+    # difference = (-watermarked_image + image) * binary_mask.astype(np.uint8)
+    # watermarked_image = image + difference
+    # watermarked_image += binary_mask.astype(np.uint8)
 
     end = time.time()
     w = wpsnr(image, watermarked_image)

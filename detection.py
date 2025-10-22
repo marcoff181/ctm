@@ -9,7 +9,7 @@ from wpsnr import wpsnr
 
 
 # DUE TO SELF CONTAINED NATURE
-ALPHA = 5.11
+ALPHA = 0.5
 BLOCKS_TO_EMBED = 32
 BLOCK_SIZE = 4
 WATERMARK_SIZE = 1024
@@ -87,14 +87,9 @@ Vwm = np.array(
 
 def detection(input1, input2, input3):
 
-    if isinstance(input1, str):
-        original_image = cv2.imread(input1, 0).copy()
-        watermarked_image = cv2.imread(input2, 0).copy()
-        attacked_image = cv2.imread(input3, 0).copy()
-    else:
-        original_image = input1.copy()
-        watermarked_image = input2.copy()
-        attacked_image = input3.copy()
+    original_image = cv2.imread(input1, 0).copy()
+    watermarked_image = cv2.imread(input2, 0).copy()
+    attacked_image = cv2.imread(input3, 0).copy()
 
     # start time
     start = time.time()
@@ -175,13 +170,13 @@ def extract_singular_values(original_image, attacked_image, blocks, block_size, 
     extracted_S = np.zeros(32)
     counts = np.zeros(32)
     
-    print(f"Location in detection")
+    # print(f"Location in detection")
     for idx, block_info in enumerate(blocks):
         # if idx >= 32:  # Only use first 32 blocks
         #     break
             
         x, y = block_info['locations']
-        print(f"x: {x}, y:{y}")
+        # print(f"x: {x}, y:{y}")
         
         # Extract from attacked image
         block_attacked = attacked_image[x:x + block_size, y:y + block_size]

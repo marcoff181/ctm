@@ -48,7 +48,10 @@ detection_functions = {
 } 
 
 # TODO: tweak iterations to find balance between speed and accuracy
-def bin_search_attack(original, watermarked, detection, mask, iterations):
+def bin_search_attack(original_path, watermarked_path, detection, mask, iterations):
+    original = cv2.imread(original_path, 0).copy()
+    watermarked = cv2.imread(watermarked_path, 0).copy()
+
     results = []
     best_attacks = []
 
@@ -66,7 +69,11 @@ def bin_search_attack(original, watermarked, detection, mask, iterations):
 
             full_attacked_img = attack_func(watermarked.copy(), mid)
             attacked_img = np.where(mask, full_attacked_img, watermarked)
-            detected, wpsnr_val = detection(original, watermarked, attacked_img)
+
+            attack_img_path = f"./tmp_attacks/{original_path.split('/')[-1].split('.')[0]}-{attack_name}-{mid}.bmp"
+            cv2.imwrite(attack_img_path,attacked_img)
+
+            detected, wpsnr_val = detection(original_path, watermarked_path, attack_img_path)
             actual_param = param_converters[attack_name](mid)
 
             if not detected and wpsnr_val > MIN_WPSNR:
@@ -191,7 +198,7 @@ def full_attack(detection_functions):
         original_path = os.path.join(originals_dir, image_name + ".bmp")
         original = cv2.imread(original_path, 0)
 
-        detected, wpsnr_val = det_fun(original,watermarked,watermarked)
+        detected, wpsnr_val = det_fun(original_path,image_path,image_path)
         print(f"\nNon-attacked image:")
         print(f"  WPSNR: {wpsnr_val:6.2f} dB")
         print(f"  detected: {detected}")
@@ -204,17 +211,17 @@ def full_attack(detection_functions):
         
         print("\nBinary search with no mask...")
         mask = original >= 0
-        res = bin_search_attack(original, watermarked, det_fun, mask, bin_search_iterations)
+        res = bin_search_attack(original_path, image_path, det_fun, mask, bin_search_iterations)
         # print(f"\nResults:\n{res}\n")
 
         print("Binary search with edges mask...")
         emask = edges_mask(original)
-        res = bin_search_attack(original, watermarked, det_fun, emask, bin_search_iterations)
+        res = bin_search_attack(original_path, image_path, det_fun, emask, bin_search_iterations)
         # print(f"\nResults:\n{res}\n")
 
         print("Binary search with noisy mask...")
         nmask = noisy_mask(original)
-        res = bin_search_attack(original, watermarked, det_fun, nmask, bin_search_iterations)
+        res = bin_search_attack(original_path, image_path, det_fun, nmask, bin_search_iterations)
 
         # TODO: add parallelization
         # TODO: find best attack and save it in output
