@@ -27,7 +27,7 @@ param_converters = {
     "AWGN": lambda x: x * 30,
     # pick closest number that is divisible by 512 so that when upscaling we come back to the same image size
     "Resize": lambda x:  np.round(((1-x)+0.4) * 512)/512,
-    "Median": lambda x: [1, 3, 5][int(round(x * 2))],
+    "Median": lambda x: [[1,3], [3,1], [3,3], [3,5], [5,3]][int(round(x * 4))],
     "Sharp": lambda x: x * 0.1,
 }
 
