@@ -51,22 +51,10 @@ def attack_strength_map(original_image):
     strength_map = np.astype(strength_map/n_of_attacks,np.uint8)
     cv2.imwrite(f"./attack_diffs/embedding_attack_tests_sum.bmp",strength_map)
 
-    # TODO: decide if the output format is correct
     return strength_map
 
 def select_best_blocks(original_image, strength_map, n_blocks,  block_size):
-    """
-    Select best blocks based on edge content.
-    
-    Args:
-        image: Input grayscale image
-        attacked image: the blanked image attacked
-        n_blocks: Number of blocks to select
-        block_size: Size of each block (4x4 for better LL subband size)
-    
-    Returns:
-        list: Locations (x, y) of selected blocks sorted by edge content
-    """
+    """Select best blocks based on how much they are attacked by using `strength_map`"""
 
     selected_blocks_tmp = []
 
@@ -75,23 +63,16 @@ def select_best_blocks(original_image, strength_map, n_blocks,  block_size):
             block = original_image[i:i + block_size, j:j + block_size]
             avg_brightness = np.average(block)
             if DARKNESS_THRESHOLD < avg_brightness < BRIGHTNESS_THRESHOLD:
-
                 block_tmp = {
                     'locations': (i,j),
                     # 'avg_brightness': avg_brightness,
                     'attack_value': np.average(strength_map[i:i + block_size, j:j + block_size])
                 }
                 selected_blocks_tmp.append(block_tmp)
-    
-    # 1. Sort all of the blocks based on the avg_brightness
-    # selected_blocks_tmp = sorted(selected_blocks_tmp, key=lambda k: k['avg_brightness'], reverse=True)
-    # # Normalize each block and score it based on the brightness value (the more the better)
-    # for i in range(len(selected_blocks_tmp)):
-    #     selected_blocks_tmp[i]['merit'] = i*BRIGHTNESS_WEIGHT
-    
-    # 2. We next want to sort them based on how much they where affected by the attacks, choosing the less affected
+
+    # sort blocks by attack strength
     selected_blocks_tmp = sorted(selected_blocks_tmp, key=lambda k: k['attack_value'], reverse=False)
-    # we value more the one attacked less normalizing the result
+
     for i in range(len(selected_blocks_tmp)):
         selected_blocks_tmp[i]['merit'] = i*ATTACK_WEIGHT
     
@@ -173,9 +154,9 @@ def embedding(original_image_path, watermark_path, alpha, dwt_level):
     # watermarked_image += binary_mask.astype(np.uint8)
 
     end = time.time()
-    w = wpsnr(image, watermarked_image)
-    print("[EMBEDDING] wPSNR: %.2fdB" % w)
-    print(f"[EMBEDDING] Time: {end - start:.2f}s")
-    print(f"[EMBEDDING] Embedded in {len(selected_blocks)} blocks of size {BLOCK_SIZE}x{BLOCK_SIZE}")
+    # w = wpsnr(image, watermarked_image)
+    # print("[EMBEDDING] wPSNR: %.2fdB" % w)
+    print(f"Time to embed: {end - start:.2f}s")
+    # print(f"[EMBEDDING] Embedded in {len(selected_blocks)} blocks of size {BLOCK_SIZE}x{BLOCK_SIZE}")
 
     return watermarked_image, watermark, Uwm, Vwm
