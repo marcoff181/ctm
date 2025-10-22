@@ -110,7 +110,7 @@ def compute_roc():
     for i in range(0, len(sample_images)):
 
         original_image = sample_images[i]
-        watermarked_image, _, _, _ = embedding.embedding(original_image, watermark_path, 5.11, 1)
+        watermarked_image = embedding.embedding(original_image, watermark_path, 5.11, 1)
 
         original_image = cv2.imread(original_image, 0)
         print(sample_images[i])

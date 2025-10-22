@@ -25,7 +25,7 @@ def main():
     
     # embedding() signature: (original_image_path, watermark_path, alpha, dwt_level)
     # Returns: (watermarked_image, watermark, Uwm, Vwm)
-    watermarked, watermark, Uwm, Vwm = embedding(
+    watermarked= embedding(
         f"./challenge_images/{image_index}.bmp", 
         mark_path, 
         alpha,
