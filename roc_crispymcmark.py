@@ -9,10 +9,24 @@ from scipy.signal import medfilt
 import embedding, detection
 
 
+# def similarity(X, X_star):
+#     # Computes the similarity measure between the original and the new watermarks.
+#     s = np.sum(np.multiply(X, X_star)) / np.sqrt(np.sum(np.multiply(X_star, X_star)))
+#     return s
+
 def similarity(X, X_star):
-    # Computes the similarity measure between the original and the new watermarks.
-    s = np.sum(np.multiply(X, X_star)) / np.sqrt(np.sum(np.multiply(X_star, X_star)))
-    return s
+    """Compute bit error rate (BER) based similarity for binary watermarks"""
+    X = X.astype(np.uint8)
+    X_star = X_star.astype(np.uint8)
+
+    # Calculate number of matching bits
+    matches = np.sum(X == X_star)
+    total = len(X)
+
+    # Similarity: 1.0 = perfect match, 0.0 = all bits different
+    similarity_score = matches / total
+
+    return similarity_score
 
 def jpeg_compression(img, QF):
     cv2.imwrite('tmp.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), QF])

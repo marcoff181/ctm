@@ -13,11 +13,11 @@ from wpsnr import wpsnr
 
 
 # embedded paramters:
-ALPHA = 0.5
+ALPHA = 5.0
 BLOCKS_TO_EMBED = 32
 BLOCK_SIZE = 4
-SPATIAL_WEIGHT = 0.33 # 0: no spatial domain, 1: only spatial domain
-ATTACK_WEIGHT = 1.0 - SPATIAL_WEIGHT
+BRIGHTNESS_WEIGHT = 0.33 # 0: no spatial domain, 1: only spatial domain
+ATTACK_WEIGHT = 1.0 - BRIGHTNESS_WEIGHT
 BRIGHTNESS_THRESHOLD = 230
 DARKNESS_THRESHOLD = 10
 
@@ -33,19 +33,19 @@ def get_watermark_svd(watermark_path):
 from attack import attack_config
 
 def attack_strength_map(original_image):
+    """evenly sample attacks and find out where they affect the original image the most"""
     strength_map = np.zeros((512, 512), dtype=np.uint64)
 
     steps= 10
     attack_range =np.linspace(0.0,1.0,steps) 
     n_of_attacks = len(attack_config) * steps
 
-    # evenly sample attacks and find out where they affect the original image the most
-    for name,attack in attack_config.items():
+ 
+    for attack in attack_config.values():
         for x in attack_range:
             attacked = attack(original_image.copy(),x)
             diff = attacked - original_image 
             strength_map +=  diff
-            # cv2.imwrite(f"./attack_diffs/embedding_attack_tests_{name}_{x}.bmp",diff)
 
     #divide by n_of_attacks to get back to the uint8 scale
     strength_map = np.astype(strength_map/n_of_attacks,np.uint8)
@@ -54,11 +54,7 @@ def attack_strength_map(original_image):
     # TODO: decide if the output format is correct
     return strength_map
 
-def IsTooBrightorTooDark(block):
-    mean_val = np.mean(block)
-    return DARKNESS_THRESHOLD < mean_val < BRIGHTNESS_THRESHOLD
-
-def select_best_blocks(original_image, attacked_image, n_blocks,  block_size):
+def select_best_blocks(original_image, strength_map, n_blocks,  block_size):
     """
     Select best blocks based on edge content.
     
@@ -77,28 +73,27 @@ def select_best_blocks(original_image, attacked_image, n_blocks,  block_size):
     for i in range(0, original_image.shape[0], block_size):
         for j in range(0, original_image.shape[1], block_size):
             block = original_image[i:i + block_size, j:j + block_size]
-            if IsTooBrightorTooDark(block):
-                # choosen to average over all of the values inside the block
-                spatial_value = np.average(block)
+            avg_brightness = np.average(block)
+            if DARKNESS_THRESHOLD < avg_brightness < BRIGHTNESS_THRESHOLD:
 
                 block_tmp = {
                     'locations': (i,j),
-                    'spatial_value': spatial_value,
-                    'attack_value': np.average(attacked_image[i:i + block_size, j:j + block_size])
+                    # 'avg_brightness': avg_brightness,
+                    'attack_value': np.average(strength_map[i:i + block_size, j:j + block_size])
                 }
                 selected_blocks_tmp.append(block_tmp)
     
-    # 1. Sort all of the blocks based on the spatial value (average on brightness)
-    selected_blocks_tmp = sorted(selected_blocks_tmp, key=lambda k: k['spatial_value'], reverse=True)
-    # Normalize each block and score it based on the brightness value (the more the better)
-    for i in range(len(selected_blocks_tmp)):
-        selected_blocks_tmp[i]['merit'] = i*SPATIAL_WEIGHT
+    # 1. Sort all of the blocks based on the avg_brightness
+    # selected_blocks_tmp = sorted(selected_blocks_tmp, key=lambda k: k['avg_brightness'], reverse=True)
+    # # Normalize each block and score it based on the brightness value (the more the better)
+    # for i in range(len(selected_blocks_tmp)):
+    #     selected_blocks_tmp[i]['merit'] = i*BRIGHTNESS_WEIGHT
     
     # 2. We next want to sort them based on how much they where affected by the attacks, choosing the less affected
     selected_blocks_tmp = sorted(selected_blocks_tmp, key=lambda k: k['attack_value'], reverse=False)
     # we value more the one attacked less normalizing the result
     for i in range(len(selected_blocks_tmp)):
-        selected_blocks_tmp[i]['merit'] += i*ATTACK_WEIGHT
+        selected_blocks_tmp[i]['merit'] = i*ATTACK_WEIGHT
     
     # 3. In the end we select the blocks with the highest merit
     selected_blocks_tmp = sorted(selected_blocks_tmp, key=lambda k: k['merit'], reverse=True)
@@ -107,8 +102,6 @@ def select_best_blocks(original_image, attacked_image, n_blocks,  block_size):
     for i in range(n_blocks):
         tmp = selected_blocks_tmp.pop()
         selected_blocks.append(tmp)
-        attacked_image[tmp['locations'][0]:tmp['locations'][0] + BLOCK_SIZE,
-                        tmp['locations'][1]:tmp['locations'][1] + BLOCK_SIZE] = 1
         
     selected_blocks = sorted(selected_blocks, key=lambda k: k['locations'], reverse=False)
 
@@ -121,7 +114,11 @@ def embedding(original_image_path, watermark_path, alpha, dwt_level):
     # Load image and watermark
     image = cv2.imread(original_image_path, 0)
     watermark, Uwm, Swm, Vwm = get_watermark_svd(watermark_path)
-    
+
+    # Swm = ((Swm - 0.1) / (15 - 0.1)) + 1 # Normalization step
+    # print(Swm)
+    # print(Swm*100)
+
     start = time.time()
 
     # Compute attack resistance map
@@ -134,15 +131,15 @@ def embedding(original_image_path, watermark_path, alpha, dwt_level):
     shape_LL_tmp = np.uint8(np.floor(image.shape[0] / (2*n_blocks_in_image))) # 512 / 256 = 2 
     
     # Prepare output images
-    watermarked_image = image.astype(np.float64)
-    binary_mask = np.zeros_like(image, dtype=np.float64)
+    watermarked_image = image.copy()
+    # binary_mask = np.zeros_like(image, dtype=np.float64)
 
     # Embed watermark in selected blocks
     # print(f"Location in embedding:")
     for idx, block_info in enumerate(selected_blocks):
-        block_x, block_y = block_info['locations']
-        # print(f"x:{block_x}, y:{block_y}")
-        block = image[block_x:block_x + BLOCK_SIZE, block_y:block_y + BLOCK_SIZE]
+        x, y = block_info['locations']
+        # print(f"x:{x}, y:{y}")
+        block = image[x:x + BLOCK_SIZE, y:y + BLOCK_SIZE]
 
         # DWT and SVD
         coeffs = pywt.wavedec2(block, wavelet='haar', level=1)
@@ -151,21 +148,26 @@ def embedding(original_image_path, watermark_path, alpha, dwt_level):
         S_new = S.copy()
 
         # Watermark singular values for this block
-        wm_start = idx * shape_LL_tmp
-        wm_end = wm_start + shape_LL_tmp
+        # wm_start = idx * shape_LL_tmp
+        # wm_end = wm_start + shape_LL_tmp
+        # print(f"wm_start: {wm_start}, wm_end: {wm_end}, len(Swm): {len(Swm)}")
 
-        if wm_end <= len(Swm):
-            S_new += Swm[wm_start:wm_end] * alpha
-            LL_new = U.dot(np.diag(S_new)).dot(V)
-            coeffs[0] = LL_new
-            block_watermarked = pywt.waverec2(coeffs, wavelet='haar')
+        # if wm_end <= len(Swm):
+        #TODO: Need to change the logic if we want more than 32 blocks
+        S_new[0] += Swm[idx] * alpha
+        LL_new = U.dot(np.diag(S_new)).dot(V)
+        coeffs[0] = LL_new
+        block_watermarked = pywt.waverec2(coeffs, wavelet='haar')
 
-            # Place watermarked block and update mask
-            watermarked_image[block_x:block_x + BLOCK_SIZE, block_y:block_y + BLOCK_SIZE] = block_watermarked
-            binary_mask[block_x:block_x + BLOCK_SIZE, block_y:block_y + BLOCK_SIZE] = 1
+        # Place watermarked block and67.18 update mask
+        watermarked_image[x:x + BLOCK_SIZE, y:y + BLOCK_SIZE] = block_watermarked
+            # binary_mask[x:x + BLOCK_SIZE, y:y + BLOCK_SIZE] = 1
 
     # Finalize watermarked image
-    watermarked_image = np.clip(watermarked_image, 0, 255).astype(np.uint8)
+    # watermarked_image = np.clip(watermarked_image, 0, 255).astype(np.uint8)
+    
+    # watermarked_image = np.uint8(watermarked_image)
+
     # difference = (-watermarked_image + image) * binary_mask.astype(np.uint8)
     # watermarked_image = image + difference
     # watermarked_image += binary_mask.astype(np.uint8)

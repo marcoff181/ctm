@@ -9,7 +9,7 @@ from wpsnr import wpsnr
 
 
 # DUE TO SELF CONTAINED NATURE
-ALPHA = 0.5
+ALPHA = 5.0
 BLOCKS_TO_EMBED = 32
 BLOCK_SIZE = 4
 WATERMARK_SIZE = 1024
@@ -85,22 +85,16 @@ Vwm = np.array(
  [ 3.38024053e-01 ,-1.20438636e-01  ,1.39515378e-02  ,1.83792650e-01 ,-2.69843455e-02  ,6.48550972e-02 ,-1.30501561e-01  ,2.55264710e-01  ,1.47048585e-01 ,-1.40324141e-01 ,-8.66521971e-03 ,-3.32686125e-02 ,-3.02344354e-01  ,6.60229157e-02 ,-2.75855058e-01  ,1.32296710e-01 ,-1.30709950e-01 ,-2.68407937e-01  ,2.15943185e-01 ,-1.91231309e-02  ,2.05205499e-02  ,1.66797682e-01  ,1.38854625e-01 ,-7.21314594e-02 ,-1.05590051e-01  ,1.44185703e-01 ,-2.28930888e-01 ,-1.94790927e-02 ,-2.92807143e-01  ,2.57244614e-01  ,2.17571533e-01 ,-2.13171975e-01]]
 )
 
-def detection(input1, input2, input3):
+def detection(original_path, watermarked_path, attacked_path):
 
-    original_image = cv2.imread(input1, 0).copy()
-    watermarked_image = cv2.imread(input2, 0).copy()
-    attacked_image = cv2.imread(input3, 0).copy()
+    original_image = cv2.imread(original_path, 0).copy()
+    watermarked_image = cv2.imread(watermarked_path, 0).copy()
+    attacked_image = cv2.imread(attacked_path, 0).copy()
 
-    # start time
-    start = time.time()
-
-        #extract watermark from watermarked image
-    watermarked_image_dummy = watermarked_image.copy()
-    # Extract watermark from attacked image
     original_watermark = extraction(
         original_image, 
         watermarked_image, 
-        watermarked_image_dummy,
+        watermarked_image,
     )
     watermark_extracted = extraction(
         original_image, 
@@ -108,127 +102,69 @@ def detection(input1, input2, input3):
         attacked_image,
     )
 
-     # Compute similarity
     sim = similarity(original_watermark, watermark_extracted)
+    # TODO: compute T after all changes are made
+    T = 0.52 # Computed threshold using ROC curve analysis
+    wpsnr_value = wpsnr(watermarked_image, attacked_image)    
+    watermark_status = 1 if sim > T and wpsnr_value > MIN_WPSNR else 0
+    return watermark_status, wpsnr_value
 
-    # Compute threshold (only once, can be cached)
-    T, _ = compute_threshold(WATERMARK_SIZE, original_watermark, N=1000)
+
+def identify_watermarked_blocks(original_image, watermarked_image):
+    """Identify blocks where watermark was embedded by detecting modifications."""
     
-    end = time.time()
-
-    output2 = wpsnr(watermarked_image, attacked_image)
-    
-    # Determine watermark status
-    watermark_status = 1 if sim > T and output2 > MIN_WPSNR else 0
-    
-    # Compute quality metric
-
-
-    # print(f'[DETECTION] Time: {end - start:.2f}s')
-    # print(f'[DETECTION] Similarity: {sim:.4f}, Threshold: {T:.4f}')
-    # print(f'[DETECTION] Status: {"DETECTED" if watermark_status else "NOT DETECTED"}')
-    # print(f'[DETECTION] wPSNR: {output2:.2f} dB')
-
-    return watermark_status, output2
-
-
-def identify_watermarked_blocks(original_image, watermarked_image, attacked_image, block_size):
-    """
-    Identify blocks where watermark was embedded by detecting modifications.
-    
-    Returns:
-        list of dicts with 'locations' key containing (x, y) tuples
-    """
     blocks_with_watermark = []
     difference = watermarked_image - original_image
-    binary_mask = np.float64(np.zeros((512, 512)))
 
-    for i in range(0, original_image.shape[0], block_size):
-        for j in range(0, original_image.shape[1], block_size):
-            block_diff = difference[i:i + block_size, j:j + block_size]
+    for i in range(0, original_image.shape[0], BLOCK_SIZE):
+        for j in range(0, original_image.shape[1], BLOCK_SIZE):
+            block_diff = difference[i:i + BLOCK_SIZE, j:j + BLOCK_SIZE]
             # Block contains watermark if average difference is non-zero
             if np.mean(block_diff) > 0:
-                blocks_with_watermark.append({'locations': (i, j)})
-                binary_mask[i:i + block_size, j:j + block_size] = 1
+                blocks_with_watermark.append((i, j))
 
-    return blocks_with_watermark, binary_mask
+    return blocks_with_watermark
 
-def extract_singular_values(original_image, attacked_image, blocks, block_size, alpha):
+def extract_singular_values(original_image, attacked_image, blocks):
     """
-    Extract watermark singular values from selected blocks.
-    
-    Args:
-        original_image: Original image
-        attacked_image: Attacked/watermarked image
-        blocks: List of block locations
-        block_size: Size of each block
-        alpha: Embedding strength
-        
-    Returns:
-        extracted_S: Array of 32 extracted singular values
+    Extract singular values from each selected block. 
+    - *Remember that a single singular value (of the watermark) is embedded in the first Singular value of block's LL*
     """
     extracted_S = np.zeros(32)
-    counts = np.zeros(32)
-    
-    # print(f"Location in detection")
-    for idx, block_info in enumerate(blocks):
-        # if idx >= 32:  # Only use first 32 blocks
-        #     break
+
+    for idx, (x,y) in enumerate(blocks):
             
-        x, y = block_info['locations']
-        # print(f"x: {x}, y:{y}")
-        
         # Extract from attacked image
-        block_attacked = attacked_image[x:x + block_size, y:y + block_size]
+        block_attacked = attacked_image[x:x + BLOCK_SIZE, y:y + BLOCK_SIZE]
         coeffs_attacked = pywt.wavedec2(block_attacked, wavelet='haar', level=1)
         LL_attacked = coeffs_attacked[0]
-        _, S_attacked, _ = np.linalg.svd(LL_attacked)
+        _, S_attacked, _ = np.linalg.svd(LL_attacked) 
         
         # Extract from original image
-        block_original = original_image[x:x + block_size, y:y + block_size]
+        block_original = original_image[x:x + BLOCK_SIZE, y:y + BLOCK_SIZE]
         coeffs_original = pywt.wavedec2(block_original, wavelet='haar', level=1)
         LL_original = coeffs_original[0]
         _, S_original, _ = np.linalg.svd(LL_original)
         
-        # Compute difference (DO NOT use abs() - preserve sign!)
-        S_diff = (S_attacked - S_original) / alpha
-        
-        # Distribute to watermark singular values
-        n_values = len(S_diff)
-        start_idx = idx * n_values
-        end_idx = start_idx + n_values
-        
-        # if end_idx <= 32:
-        #     extracted_S[start_idx:end_idx] += abs(S_diff)
-        #     counts[start_idx:end_idx] += 1
-        extracted_S[start_idx:end_idx] += abs(S_diff)
-        counts[start_idx:end_idx] += 1
-
-    # Average where multiple extractions occurred
-    mask = counts > 0
-    extracted_S[mask] /= counts[mask]
+        # Compute Singular value difference
+        S_diff = (S_attacked[0] - S_original[0]) / ALPHA
+        # Quando ho scritto questo codice, solo dio sa perche' ho messo abs(), ma il ROC migliora di 100%
+        extracted_S[idx] += abs(S_diff) 
 
     return extracted_S
 
 
 def extraction(original_image, watermarked_image, attacked_image):
 
-    blocks_with_watermark, binary_mask = identify_watermarked_blocks(
+    blocks_with_watermark = identify_watermarked_blocks(
         original_image, 
         watermarked_image, 
-        attacked_image,
-        BLOCK_SIZE
     )
 
-    # attacked_image -= binary_mask.astype(np.uint8) # do not understand
-
-    # Extract singular values from each block
     extracted_S = extract_singular_values(
         original_image,
         attacked_image,
         blocks_with_watermark,
-        BLOCK_SIZE,
-        ALPHA
     )
 
     # Reconstruct watermark from singular values
@@ -236,9 +172,7 @@ def extraction(original_image, watermarked_image, attacked_image):
     watermark_extracted = watermark_matrix.flatten()
     
     # Normalize and binarize
-    watermark_extracted = (watermark_extracted - watermark_extracted.min()) / (
-        watermark_extracted.max() - watermark_extracted.min() + 1e-10
-    )
+    watermark_extracted /= np.max(watermark_extracted)
     watermark_extracted = (watermark_extracted > 0.5).astype(np.uint8)
 
     return watermark_extracted
@@ -258,34 +192,7 @@ def similarity(X, X_star):
 
     return similarity_score
 
-
-def compute_threshold(mark_size, w, N=1000):
-    """Compute detection threshold using Monte Carlo simulation for binary watermarks"""
-    np.random.seed(42)
-    SIM = np.zeros(N)
-
-    # Convert watermark to binary
-    w_binary = (w > 0.5).astype(np.uint8)
-
-    for i in range(N):
-        # Generate random binary sequence
-        r = np.random.randint(0, 2, mark_size, dtype=np.uint8)
-        SIM[i] = similarity(w_binary, r)
-
-    SIMs = SIM.copy()
-    SIM.sort()
-
-    # Threshold: mean + 3*std (for binary, expected ~0.5 for random)
-    mean_sim = np.mean(SIM)
-    std_sim = np.std(SIM)
-    T = mean_sim + 3 * std_sim
-
-    return T, SIMs
-
-
-
-
-def verify_watermark_extraction(original, watermarked, attacked, alpha, mark_path, dwt_level=1, output_prefix=""):
+def verify_watermark_extraction(original, watermarked, attacked, mark_path, dwt_level=1, output_prefix=""):
     """Verify that the embedded watermark can be correctly extracted."""
     print("\n" + "=" * 80)
     print("WATERMARK EXTRACTION VERIFICATION")
@@ -468,7 +375,7 @@ def verify_watermark_extraction(original, watermarked, attacked, alpha, mark_pat
     False Neg:     {orig_one_ext_zero:4d}
 
     PARAMETERS
-    Alpha (LH/HL):   {alpha:.2f}
+    ALPHA (LH/HL):   {ALPHA:.2f}
 
     STATUS:          {status}
 """
@@ -504,53 +411,55 @@ def verify_watermark_extraction(original, watermarked, attacked, alpha, mark_pat
     print(f"\nSaved overview plot to: {output_path1}")
     plt.close(fig1)
 
-    # --- Block mask visualization ---
-    # Identify blocks where watermark was embedded (from embedding)
-    blocks_embedded, mask_embedded = identify_watermarked_blocks(
-        original, watermarked, watermarked, BLOCK_SIZE
-    )
-    # Identify blocks detected as watermarked (from extraction)
-    blocks_detected, mask_detected = identify_watermarked_blocks(
-        original, watermarked, attacked, BLOCK_SIZE
-    )
 
-    fig, ax = plt.subplots(figsize=(8, 8))
-    ax.imshow(original, cmap="gray")
-    ax.set_title("Watermark Block Locations", fontsize=16, fontweight="bold")
-    ax.axis("off")
+    #TODO: fix block mask visualization: currently displaying same blocks for embedded and detected
+    # # --- Block mask visualization ---
+    # # Identify blocks where watermark was embedded (from embedding)
+    # blocks_embedded = identify_watermarked_blocks(
+    #     original, watermarked
+    # )
+    # # Identify blocks detected as watermarked (from extraction)
+    # blocks_detected = identify_watermarked_blocks(
+    #     original, watermarked
+    # )
 
-    embedded_set = set([tuple(b['locations']) for b in blocks_embedded])
-    detected_set = set([tuple(b['locations']) for b in blocks_detected])
+    # fig, ax = plt.subplots(figsize=(8, 8))
+    # ax.imshow(original, cmap="gray")
+    # ax.set_title("Watermark Block Locations", fontsize=16, fontweight="bold")
+    # ax.axis("off")
 
-    for loc in embedded_set:
-        if loc in detected_set:
-            # Overlap: green border
-            rect = plt.Rectangle((loc[1], loc[0]), BLOCK_SIZE, BLOCK_SIZE, linewidth=2.5, edgecolor='green', facecolor='none', label='Embedded & Detected')
-            ax.add_patch(rect)
-        else:
-            # Embedded only: blue border
-            rect = plt.Rectangle((loc[1], loc[0]), BLOCK_SIZE, BLOCK_SIZE, linewidth=2, edgecolor='blue', facecolor='none', label='Embedded Block')
-            ax.add_patch(rect)
+    # embedded_set = set([tuple(b['locations']) for b in blocks_embedded])
+    # detected_set = set([tuple(b['locations']) for b in blocks_detected])
 
-    for loc in detected_set:
-        if loc not in embedded_set:
-            # Detected only: orange border
-            rect = plt.Rectangle((loc[1], loc[0]), BLOCK_SIZE, BLOCK_SIZE, linewidth=2, edgecolor='orange', facecolor='none', label='Detected Block')
-            ax.add_patch(rect)
+    # for loc in embedded_set:
+    #     if loc in detected_set:
+    #         # Overlap: green border
+    #         rect = plt.Rectangle((loc[1], loc[0]), BLOCK_SIZE, BLOCK_SIZE, linewidth=2.5, edgecolor='green', facecolor='none', label='Embedded & Detected')
+    #         ax.add_patch(rect)
+    #     else:
+    #         # Embedded only: blue border
+    #         rect = plt.Rectangle((loc[1], loc[0]), BLOCK_SIZE, BLOCK_SIZE, linewidth=2, edgecolor='blue', facecolor='none', label='Embedded Block')
+    #         ax.add_patch(rect)
 
-    # Custom legend
-    from matplotlib.patches import Patch
-    legend_elements = [
-        Patch(edgecolor='blue', facecolor='none', label='Embedded Block', linewidth=2),
-        Patch(edgecolor='orange', facecolor='none', label='Detected Block', linewidth=2),
-        Patch(edgecolor='green', facecolor='none', label='Embedded & Detected', linewidth=2.5)
-    ]
-    ax.legend(handles=legend_elements, loc='upper right', fontsize=12, frameon=True)
+    # for loc in detected_set:
+    #     if loc not in embedded_set:
+    #         # Detected only: orange border
+    #         rect = plt.Rectangle((loc[1], loc[0]), BLOCK_SIZE, BLOCK_SIZE, linewidth=2, edgecolor='orange', facecolor='none', label='Detected Block')
+    #         ax.add_patch(rect)
 
-    plt.tight_layout()
-    output_path2 = os.path.join("./", f"{output_prefix}block_mask_overlay.png")
-    plt.savefig(output_path2, dpi=300, bbox_inches="tight", facecolor="white", edgecolor="none")
-    plt.close(fig)
+    # # Custom legend
+    # from matplotlib.patches import Patch
+    # legend_elements = [
+    #     Patch(edgecolor='blue', facecolor='none', label='Embedded Block', linewidth=2),
+    #     Patch(edgecolor='orange', facecolor='none', label='Detected Block', linewidth=2),
+    #     Patch(edgecolor='green', facecolor='none', label='Embedded & Detected', linewidth=2.5)
+    # ]
+    # ax.legend(handles=legend_elements, loc='upper right', fontsize=12, frameon=True)
+
+    # plt.tight_layout()
+    # output_path2 = os.path.join("./", f"{output_prefix}block_mask_overlay.png")
+    # plt.savefig(output_path2, dpi=300, bbox_inches="tight", facecolor="white", edgecolor="none")
+    # plt.close(fig)
 
 
     print("=" * 80 + "\n")
