@@ -19,8 +19,6 @@ output_dir = "./attacked_groups_images/"
 originals_dir = "./challenge_images/"
 attacked_wpsnr_lower_bound = 35
 
-# ciao :  Callable[[float], float] = lambda x: np.round(x * 512)/512
-
 # conversion between the input value 0.0..1.0 and the actual parameters of each attack function
 param_converters = {
     "JPEG": lambda x: int(round((1 - x) * 100)),
@@ -90,7 +88,7 @@ def bin_search_attack(original_path, watermarked_path, detection, mask, iteratio
         if best_param is not None:
             actual_param = param_converters[attack_name](best_param)
             print(
-                f"  ✓ {attack_name}: Optimal param = {actual_param:.4f} | WPSNR: {best_wpsnr:.2f} dB"
+                f"  ✓ {attack_name}: Optimal param = {actual_param} | WPSNR: {best_wpsnr:.2f} dB"
             )
             results.append(
                 {
