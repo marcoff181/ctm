@@ -3,16 +3,13 @@ import random
 import cv2
 import os
 import numpy as np
+from attack_functions import awgn, blur, jpeg_compression, median, resizing, sharpening
+import embedding, detection
 from matplotlib import pyplot as plt
 from scipy.ndimage import gaussian_filter
 from scipy.signal import medfilt
-import embedding, detection
 
-
-# def similarity(X, X_star):
-#     # Computes the similarity measure between the original and the new watermarks.
-#     s = np.sum(np.multiply(X, X_star)) / np.sqrt(np.sum(np.multiply(X_star, X_star)))
-#     return s
+from attack import attack_config
 
 def similarity(X, X_star):
     """Compute bit error rate (BER) based similarity for binary watermarks"""
@@ -28,56 +25,37 @@ def similarity(X, X_star):
 
     return similarity_score
 
-def jpeg_compression(img, QF):
-    cv2.imwrite('tmp.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), QF])
-    attacked = cv2.imread('tmp.jpg', 0)
-    os.remove('tmp.jpg')
-    return attacked
-
-def blur(img, sigma):
-    attacked = gaussian_filter(img, sigma)
-    return attacked
-
-def awgn(img, std, seed):
-    mean = 0.0
-    # np.random.seed(seed)
-    attacked = img + np.random.normal(mean, std, img.shape)
-    attacked = np.clip(attacked, 0, 255)
-    return attacked
-
-def sharpening(img, sigma, alpha):
-    filter_blurred_f = gaussian_filter(img, sigma)
-    attacked = img + alpha * (img - filter_blurred_f)
-    return attacked
-
-def median(img, kernel_size):
-    attacked = medfilt(img, kernel_size)
-    return attacked
-
-def resizing(img, scale):
-  from skimage.transform import rescale
-  x, y = img.shape
-  attacked = rescale(img, scale)
-  attacked = rescale(attacked, 1/scale)
-  attacked = attacked[:x, :y]
-  return attacked
-
 def random_attack(img):
-  i = random.randint(1,6)
-  if i==1:
-    attacked = awgn(img, 5.0, 123)
-  elif i==2:
-    attacked = blur(img, [3, 2])
-  elif i==3:
-    attacked = sharpening(img, 1, 1)
-  elif i==4:
-    attacked = median(img, [3, 5])
-  elif i==5:
-    attacked = resizing(img, 0.5)
-  elif i==6:
-    attacked = jpeg_compression(img, 75)
-  return attacked
+    # Select a random attack from attack_config
+    attack_name = random.choice(list(attack_config.keys()))
+    attack_func = attack_config[attack_name]
+    # Random strength between 0.0 and 1.0
+    strength = random.uniform(0.0, 1.0)
+    attacked = attack_func(img, strength)
+    # print(f"Applied attack: {attack_name} with strength {strength:.2f}")
+    return attacked
 
+
+def attack_strength_map(original_image):
+    """evenly sample attacks and find out where they affect the original image the most"""
+    strength_map = np.zeros((512, 512), dtype=np.uint64)
+
+    steps = 10
+    attack_range = np.linspace(0.0,1.0,steps) 
+    n_of_attacks = len(attack_config) * steps
+
+ 
+    for attack in attack_config.values():
+        for x in attack_range:
+            attacked = attack(original_image.copy(),x)
+            diff = attacked - original_image 
+            strength_map +=  diff
+
+    #divide by n_of_attacks to get back to the uint8 scale
+    strength_map = np.astype(strength_map/n_of_attacks,np.uint8)
+    cv2.imwrite(f"./attack_diffs/embedding_attack_tests_sum.bmp",strength_map)
+
+    return strength_map
 
 
 def compute_roc():
@@ -124,7 +102,7 @@ def compute_roc():
         # plt.show()
 
         sample = 0
-        while sample <= 9:
+        while sample <= 500:
             # fakemark is the watermark for H0
             fakemark = np.random.uniform(0.0, 1.0, watermark_size)
             fakemark = np.uint8(np.rint(fakemark))
