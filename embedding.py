@@ -52,15 +52,20 @@ def attack_strength_map(original_image):
 from skimage.filters.rank import entropy
 from skimage.morphology import disk
 def svd_flat_score(block):
-    if block.ndim == 3:
-        block = block.mean(axis=2)
+    # get LL
     block = block.astype(np.float32)
     LL, _ = pywt.dwt2(block, 'haar')
+
+    # SVD of LL
     S = np.linalg.svd(LL, full_matrices=False)[1]
+    # normalize singular values
     S /= S.sum() + 1e-8
+    # shannon entropy normalized: high entropy means noisyer block, better for invisibility but our method does not embed well into really noisy blocks
     entropy = -np.sum(S * np.log2(S + 1e-8)) / np.log2(len(S))
+    # computes variance: high variance -> bright/dark extremes
     energy = np.var(LL)
-    # Favor lower variance (flatter) blocks, avoid extremes
+
+    # compromise between the two, use entropy exponent to tweak the final score
     return float((entropy** 3) * np.exp(-energy/50))
 
 def select_best_blocks(original_image, strength_map):
