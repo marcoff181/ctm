@@ -95,8 +95,8 @@ def compute_roc():
         # ================== ADDITIONS NOT REQUIRED IN CHALLENGE RULES ==========
         # othermark = np.random.uniform(0.0, 1.0, watermark_size)
         # othermark = np.uint8(np.rint(othermark))
-        # np.save("othermark.npy", othermark)
-        # othermarked_image = embedding.embedding(original_image,"othermark.npy")
+        # np.save("./tpm-attacks/othermark.npy", othermark)
+        # othermarked_image = embedding.embedding(original_image,"./tmp_attacks/othermark.npy")
         # ====================================================================
 
         original_image = cv2.imread(original_image, 0)
