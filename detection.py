@@ -9,24 +9,11 @@ from wpsnr import wpsnr
 
 
 # DUE TO SELF CONTAINED NATURE
-ALPHA = 10.0
+ALPHA = 5.0
 N_BLOCKS = 16
 BLOCK_SIZE = 16
 WATERMARK_SIZE = 1024
 MIN_WPSNR = 35.00
-
-# Singular values decomposition of wm 
-SWM=np.array([1.72367920e+01, 5.27485115e+00,5.14581258e+00,4.73524334e+00
-,4.20574737e+00,4.05502083e+00,3.99056068e+00,3.59464589e+00
-,3.39667900e+00,3.26906212e+00,3.08250746e+00,2.90078341e+00
-,2.80706213e+00,2.76895472e+00,2.43943668e+00,2.33503645e+00
-,2.30851910e+00,2.17211436e+00,2.05241326e+00,1.98549850e+00
-,1.82330602e+00,1.49757440e+00,1.36229218e+00,1.32421073e+00
-,1.16592996e+00,1.02984552e+00,7.56959762e-01,6.74458824e-01
-,4.19601100e-01,2.43030013e-01,1.93509414e-01,3.08011303e-04])
-# take out as much as the information we are putting in
-SWM[:N_BLOCKS] = 0
-
 
 Uwm = np.array(
 [[-2.31267458e-01  ,5.73428696e-02 ,-2.26156433e-01  ,1.30579290e-01 ,-5.81210093e-03  ,1.38494753e-01  ,1.74246841e-01 ,-5.55574921e-02  ,7.71068824e-02  ,1.13620622e-01  ,2.03035610e-01  ,9.10635146e-02  ,2.08595775e-01 ,-2.42470021e-01 ,-1.11385100e-01 ,-2.07218918e-01  ,2.89637010e-01  ,3.66299869e-01 ,-7.33106387e-02  ,1.48494224e-01 ,-2.56492373e-01  ,2.16943705e-01  ,1.67666511e-03  ,8.70096585e-02 ,-2.01149970e-01 ,-1.89513387e-01 ,-2.40338304e-01 ,-1.15414849e-01  ,2.59539121e-01  ,1.20545652e-01 ,-8.00391995e-03  ,3.18239287e-02],
@@ -117,7 +104,7 @@ def detection(original_path, watermarked_path, attacked_path):
 
     sim = similarity(original_watermark, watermark_extracted)
     # TODO: compute T after all changes are made
-    T = 0.53 # Computed threshold using ROC curve analysis
+    T = 0.55 # Computed threshold using ROC curve analysis
     wpsnr_value = wpsnr(watermarked_image, attacked_image)    
     detected = 1 if sim > T and wpsnr_value > MIN_WPSNR else 0
     return detected, wpsnr_value
@@ -143,8 +130,7 @@ def extract_singular_values(original_image, attacked_image, blocks):
     Extract singular values from each selected block. 
     - *Remember that a single singular value (of the watermark) is embedded in the first Singular value of block's LL*
     """
-    # extracted_S = np.zeros(32, dtype=np.uint8)
-    extracted_S = SWM.copy()
+    extracted_S = np.zeros(32, dtype=np.uint8)
 
     for idx, (x,y) in enumerate(blocks):
         block_attacked = attacked_image[x:x + BLOCK_SIZE, y:y + BLOCK_SIZE]
@@ -183,9 +169,7 @@ def extraction(original_image, watermarked_image, attacked_image):
     watermark_matrix = Uwm.dot(np.diag(extracted_S)).dot(Vwm)
     watermark_extracted = watermark_matrix.flatten()
     
-    # Normalize and binarize
-    # TODO: sometimes throws errors: invalid value encountered in divide
-    watermark_extracted /= np.max(watermark_extracted)
+    # Binarize
     watermark_extracted = (watermark_extracted > 0.5).astype(np.uint8)
 
     return watermark_extracted

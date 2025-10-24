@@ -9,7 +9,7 @@ from wpsnr import wpsnr
 import attack
 
 def main():
-    alpha = 8.0  # Match the ALPHA constant in embedding.py
+    alpha = 5.0  # Match the ALPHA constant in embedding.py
     mark_path = "crispymcmark.npy"
     image_index = "0030"
     original_path = f"./challenge_images/{image_index}.bmp"

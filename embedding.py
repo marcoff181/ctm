@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+from numpy.linalg import svd
 import pywt
 import time
 import os
@@ -15,7 +16,7 @@ from attack import attack_config
 from wpsnr import wpsnr
 
 # embedded parameters:
-ALPHA = 10.0
+ALPHA = 5.0
 N_BLOCKS =  16
 BLOCK_SIZE = 16
 
@@ -48,6 +49,20 @@ def attack_strength_map(original_image):
 
     return strength_map
 
+from skimage.filters.rank import entropy
+from skimage.morphology import disk
+def svd_flat_score(block):
+    if block.ndim == 3:
+        block = block.mean(axis=2)
+    block = block.astype(np.float32)
+    LL, _ = pywt.dwt2(block, 'haar')
+    S = np.linalg.svd(LL, full_matrices=False)[1]
+    S /= S.sum() + 1e-8
+    entropy = -np.sum(S * np.log2(S + 1e-8)) / np.log2(len(S))
+    energy = np.var(LL)
+    # Favor lower variance (flatter) blocks, avoid extremes
+    return float((entropy** 3) * np.exp(-energy/50))
+
 def select_best_blocks(original_image, strength_map):
     """Select best blocks based on how much they are attacked by using `strength_map`"""
 
@@ -55,13 +70,16 @@ def select_best_blocks(original_image, strength_map):
 
     for i in range(0, original_image.shape[0], BLOCK_SIZE):
         for j in range(0, original_image.shape[1], BLOCK_SIZE):
+            block_location = slice(i, i + BLOCK_SIZE), slice(j, j + BLOCK_SIZE)
             blocks.append({
                 'locations': (i,j),
-                'attack_strength': np.average(strength_map[i:i + BLOCK_SIZE, j:j + BLOCK_SIZE])
+                'attack_strength': np.average(strength_map[block_location]),
+                'entropy' :svd_flat_score(original_image[block_location])
             })
 
     # select first x blocks with lowest attack strength
-    best_blocks = sorted(blocks, key=lambda k: k['attack_strength'])[:N_BLOCKS]
+    # best_blocks = sorted(blocks, key=lambda k: k['attack_strength'])[:N_BLOCKS]
+    best_blocks = sorted(blocks, key=lambda k: k['entropy'],reverse=True)[:N_BLOCKS]
     block_positions = [block['locations'] for block in best_blocks]
         
     # order blocks based on their location, so they can be retrieved in a deterministic order
@@ -89,6 +107,7 @@ def embedding(image_path, watermark_path):
         Ub, Sb, Vb = np.linalg.svd(LLb)
 
         Sb[0] += Swm[idx] * ALPHA
+
 
         # iSVD
         LLnew = Ub.dot(np.diag(Sb)).dot(Vb)

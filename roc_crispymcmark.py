@@ -91,6 +91,9 @@ def compute_roc():
         original_image = sample_images[i]
 
         watermarked_image = embedding.embedding(original_image, watermark_path)
+        # just to check how visible is the mark
+        name = original_image.split("/")[1]
+        cv2.imwrite("./watermarked_groups_images/crispymcmark_"+name ,watermarked_image)
 
         # ================== ADDITIONS NOT REQUIRED IN CHALLENGE RULES ==========
         # othermark = np.random.uniform(0.0, 1.0, watermark_size)
