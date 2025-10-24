@@ -57,8 +57,8 @@ def noisy_mask(img, window=7, percentile=90, dilate_iter=0):
         mask = cv2.dilate(mask.astype(np.uint8), se, iterations=dilate_iter).astype(bool)
     return mask
 
-# TODO: note the percenile paramter can be tweaked, currently 5% covers more than enough
-def entropy_mask(img, block_size=16, entropy_exp=3, energy_thr=50, percentile=2):
+# TODO: note the percenile paramter can be tweaked, currently 3%-5% covers more than enough
+def entropy_mask(img, block_size=16, entropy_exp=3, energy_thr=50, percentile=3):
     """
     Mask blocks with highest SVD flatness score (similar to embedding block selection).
     """
