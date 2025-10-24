@@ -11,7 +11,7 @@ import attack
 def main():
     alpha = 5.0  # Match the ALPHA constant in embedding.py
     mark_path = "crispymcmark.npy"
-    image_index = "0030"
+    image_index = "0002"
     original_path = f"./challenge_images/{image_index}.bmp"
     watermarked_path = f"./watermarked_groups_images/crispymcmark_{image_index}.bmp"
 
@@ -22,7 +22,7 @@ def main():
     print(f"Image: {image_index}")
 
     # embedding
-    watermarked= embedding( original_path, mark_path )
+    watermarked= embedding(original_path, mark_path)
     watermarked = watermarked.astype(np.uint8)
     cv2.imwrite(watermarked_path,watermarked)
 

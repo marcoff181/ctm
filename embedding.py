@@ -49,8 +49,7 @@ def attack_strength_map(original_image):
 
     return strength_map
 
-from skimage.filters.rank import entropy
-from skimage.morphology import disk
+
 def svd_flat_score(block):
     # get LL
     block = block.astype(np.float32)

@@ -56,7 +56,39 @@ def noisy_mask(img, window=7, percentile=90, dilate_iter=0):
         se = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3))
         mask = cv2.dilate(mask.astype(np.uint8), se, iterations=dilate_iter).astype(bool)
     return mask
-    
+
+# TODO: note the percenile paramter can be tweaked, currently 5% covers more than enough
+def entropy_mask(img, block_size=16, entropy_exp=3, energy_thr=50, percentile=2):
+    """
+    Mask blocks with highest SVD flatness score (similar to embedding block selection).
+    """
+    if img.ndim == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img = img.astype(np.float32)
+    h, w = img.shape
+    mask = np.zeros_like(img, dtype=bool)
+    scores = []
+
+    for i in range(0, h, block_size):
+        for j in range(0, w, block_size):
+            block = img[i:i+block_size, j:j+block_size]
+            if block.shape[0] < block_size or block.shape[1] < block_size:
+                continue
+            U, S, V = np.linalg.svd(block, full_matrices=False)
+            S /= S.sum() + 1e-8
+            entropy = -np.sum(S * np.log2(S + 1e-8)) / np.log2(len(S))
+            energy = np.var(block)
+            score = (entropy ** entropy_exp) * np.exp(-energy / energy_thr)
+            scores.append((i, j, score))
+
+    # Select blocks with highest scores (most likely to be used for embedding)
+    scores = sorted(scores, key=lambda x: x[2], reverse=True)
+    n_select = int(len(scores) * percentile / 100)
+    for idx in range(n_select):
+        i, j, _ = scores[idx]
+        mask[i:i+block_size, j:j+block_size] = True
+
+    return mask
 
 
 

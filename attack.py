@@ -8,7 +8,7 @@ from wpsnr import wpsnr
 
 import pandas as pd
 from attack_functions import awgn, blur, sharpening, median, resizing, jpeg_compression
-from utilities import edges_mask, noisy_mask
+from utilities import edges_mask, noisy_mask, entropy_mask, show_images
 
 MIN_WPSNR = 35.00
 
@@ -219,6 +219,16 @@ def full_attack(detection_functions):
         print("Binary search with noisy mask...")
         nmask = noisy_mask(original)
         res = bin_search_attack(original_path, watermarked_path, det_fun, nmask, bin_search_iterations)
+        
+        print("Binary search with entropy mask...")
+        emask = entropy_mask(original)
+        
+        # note for debugging
+        # diff_img = np.abs(watermarked.astype(float) - original.astype(float))
+        # show_images(diff_img, emask)
+        res = bin_search_attack(original_path, watermarked_path, det_fun, emask, bin_search_iterations)
+
+        
 
         # TODO: add parallelization
         # TODO: find best attack and save it in output
