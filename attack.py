@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from wpsnr import wpsnr
 
-
 import pandas as pd
 from attack_functions import awgn, blur, sharpening, median, resizing, jpeg_compression
 from utilities import edges_mask, noisy_mask
@@ -88,7 +87,7 @@ def bin_search_attack(original_path, watermarked_path, detection, mask, iteratio
         if best_param is not None:
             actual_param = param_converters[attack_name](best_param)
             print(
-                f"  ✓ {attack_name}: Optimal param = {actual_param} | WPSNR: {best_wpsnr:.2f} dB"
+                f"  ✓ {attack_name}: Optimal param = {actual_param:.4f} | WPSNR: {best_wpsnr:.2f} dB"
             )
             results.append(
                 {

@@ -36,26 +36,26 @@ def random_attack(img):
     return attacked
 
 
-def attack_strength_map(original_image):
-    """evenly sample attacks and find out where they affect the original image the most"""
-    strength_map = np.zeros((512, 512), dtype=np.uint64)
-
-    steps = 10
-    attack_range = np.linspace(0.0,1.0,steps) 
-    n_of_attacks = len(attack_config) * steps
-
- 
-    for attack in attack_config.values():
-        for x in attack_range:
-            attacked = attack(original_image.copy(),x)
-            diff = attacked - original_image 
-            strength_map +=  diff
-
-    #divide by n_of_attacks to get back to the uint8 scale
-    strength_map = np.astype(strength_map/n_of_attacks,np.uint8)
-    cv2.imwrite(f"./attack_diffs/embedding_attack_tests_sum.bmp",strength_map)
-
-    return strength_map
+# def attack_strength_map(original_image):
+#     """evenly sample attacks and find out where they affect the original image the most"""
+#     strength_map = np.zeros((512, 512), dtype=np.uint64)
+#
+#     steps = 10
+#     attack_range = np.linspace(0.0,1.0,steps) 
+#     n_of_attacks = len(attack_config) * steps
+#
+#
+#     for attack in attack_config.values():
+#         for x in attack_range:
+#             attacked = attack(original_image.copy(),x)
+#             diff = attacked - original_image 
+#             strength_map +=  diff
+#
+#     #divide by n_of_attacks to get back to the uint8 scale
+#     strength_map = np.astype(strength_map/n_of_attacks,np.uint8)
+#     cv2.imwrite(f"./attack_diffs/embedding_attack_tests_sum.bmp",strength_map)
+#
+#     return strength_map
 
 
 def compute_roc():
@@ -86,12 +86,21 @@ def compute_roc():
     labels = []
 
     for i in range(0, len(sample_images)):
+    # for i in range(0, 5):
 
         original_image = sample_images[i]
-        watermarked_image = embedding.embedding(original_image, watermark_path, 5.11, 1)
+
+        watermarked_image = embedding.embedding(original_image, watermark_path)
+
+        # ================== ADDITIONS NOT REQUIRED IN CHALLENGE RULES ==========
+        # othermark = np.random.uniform(0.0, 1.0, watermark_size)
+        # othermark = np.uint8(np.rint(othermark))
+        # np.save("othermark.npy", othermark)
+        # othermarked_image = embedding.embedding(original_image,"othermark.npy")
+        # ====================================================================
 
         original_image = cv2.imread(original_image, 0)
-        print(sample_images[i])
+        print(sample_images[i], end = '\r')
         #plot original and watermarked image
         # plt.subplot(1, 2, 1)
         # plt.imshow(original_image, cmap='gray')
@@ -102,7 +111,7 @@ def compute_roc():
         # plt.show()
 
         sample = 0
-        while sample <= 500:
+        while sample <= 25:
             # fakemark is the watermark for H0
             fakemark = np.random.uniform(0.0, 1.0, watermark_size)
             fakemark = np.uint8(np.rint(fakemark))
@@ -110,20 +119,42 @@ def compute_roc():
             # random attack to watermarked image (you can modify it)
             attacked_image = random_attack(watermarked_image)
 
-            # extract attacked watermark
-            w_ex_atk = detection.extraction(original_image, watermarked_image, attacked_image)
+            # check we are extracting the correct mark from an attacked image
+            extracted_watermark = detection.extraction(original_image, watermarked_image, attacked_image)
 
-            # compute similarity H1
-            scores.append(similarity(watermark, w_ex_atk))
+            scores.append(similarity(watermark, extracted_watermark))
             labels.append(1)
-            # compute similarity H0
-            scores.append(similarity(fakemark, w_ex_atk))
+
+            scores.append(similarity(fakemark, extracted_watermark))
             labels.append(0)
+
+            # ================== ADDITIONS NOT REQUIRED IN CHALLENGE RULES ==========
+
+            # check if we are able to embed and extract a different watermark
+            # shows how much information about our watermark we are hardcoding
+            # still, not needed for the challenge
+            # extracted_othermark = detection.extraction(original_image, othermarked_image, attacked_image)
+            #
+            # scores.append(similarity(othermark, extracted_othermark))
+            # labels.append(1)
+            #
+            # scores.append(similarity(fakemark, extracted_othermark))
+            # labels.append(0)
+
+
+            # check that passing original as attacked does not find watermark
+            extracted_watermark = detection.extraction(original_image, watermarked_image, original_image)
+
+            scores.append(similarity(watermark, extracted_watermark))
+            labels.append(0)
+
+            # =======================================================================
+
             sample += 1
 
     # print the scores and labels
-    print('Scores:', scores)
-    print('Labels:', labels)
+    # print('Scores:', scores)
+    # print('Labels:', labels)
 
 
     # compute ROC
@@ -146,12 +177,22 @@ def compute_roc():
     plt.title('Receiver operating characteristic example')
     plt.legend(loc="lower right")
     plt.savefig("roc_crispymcmark.png", dpi=300, bbox_inches="tight")
-    plt.show()
 
-    idx_tpr = np.where((fpr - 0.05) == min(i for i in (fpr - 0.05) if i > 0))
-    print('For a FPR approximately equals to 0.05 corresponds a TPR equals to %0.2f' % tpr[idx_tpr[0][0]])
-    print('For a FPR approximately equals to 0.05 corresponds a threshold equals to %0.2f' % tau[idx_tpr[0][0]])
-    print('Check FPR %0.2f' % fpr[idx_tpr[0][0]])
+
+    rocs = zip(fpr,tpr,tau)
+
+    fp, tp, T = sorted([r if r[0] < 0.0001 else (0,0,0)for r in rocs ],key = lambda k : k [1])[-1]
+    print(f'Choose this = FPR {fp:.4f} -> TPR: {tp:.2f} threshold: {T:.2f}')
+    rocs = zip(fpr,tpr,tau)
+    fp, tp, T = sorted([r if r[0] < 0.01 else (0,0,0)for r in rocs ],key = lambda k : k [1])[-1]
+    print(f'FPR<0.01    = FPR {fp:.4f} -> TPR: {tp:.2f} threshold: {T:.2f}')
+    rocs = zip(fpr,tpr,tau)
+    fp, tp, T = sorted([r if r[0] < 0.1 else (0,0,0)for r in rocs ],key = lambda k : k [1])[-1]
+    print(f'FPR<0.1     = FPR {fp:.4f} -> TPR: {tp:.2f} threshold: {T:.2f}')
+    rocs = zip(fpr,tpr,tau)
+    fp, tp, T = sorted(rocs,key = lambda k : k [1])[-1]
+    print(f'Highest TPR = FPR {fp:.4f} -> TPR: {tp:.2f} threshold: {T:.2f}')
+    plt.show()
 
     # end time
     end = time.time()

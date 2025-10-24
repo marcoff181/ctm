@@ -15,11 +15,10 @@ from attack import attack_config
 from wpsnr import wpsnr
 
 # embedded parameters:
-ALPHA = 5.0
-BLOCKS_TO_EMBED = 32
-BLOCK_SIZE = 4
-# BRIGHTNESS_THRESHOLD = 230
-# DARKNESS_THRESHOLD = 10
+ALPHA = 10.0
+N_BLOCKS =  16
+BLOCK_SIZE = 16
+
 
 def get_watermark_S(watermark_path):
     watermark = np.load(watermark_path)
@@ -49,45 +48,34 @@ def attack_strength_map(original_image):
 
     return strength_map
 
-def select_best_blocks(original_image, strength_map, n_blocks,  block_size):
+def select_best_blocks(original_image, strength_map):
     """Select best blocks based on how much they are attacked by using `strength_map`"""
 
     blocks = []
 
-    for i in range(0, original_image.shape[0], block_size):
-        for j in range(0, original_image.shape[1], block_size):
-            block = original_image[i:i + block_size, j:j + block_size]
-            # TODO: for now seemed like it was making no difference, if we want to try it properly we need to decide on the threshold values
-            # NOTE: when enabled for now, WPSNR does not even change second decimal value
-            # avg_brightness = np.average(block)
-            # if DARKNESS_THRESHOLD < avg_brightness < BRIGHTNESS_THRESHOLD:
-            block_attack_strength = np.average(strength_map[i:i + block_size, j:j + block_size])
+    for i in range(0, original_image.shape[0], BLOCK_SIZE):
+        for j in range(0, original_image.shape[1], BLOCK_SIZE):
             blocks.append({
                 'locations': (i,j),
-                'attack_strength': np.average(strength_map[i:i + block_size, j:j + block_size])
+                'attack_strength': np.average(strength_map[i:i + BLOCK_SIZE, j:j + BLOCK_SIZE])
             })
 
-    # select first 32 blocks with lowest attack strength
-    best_blocks = sorted(blocks, key=lambda k: k['attack_strength'])[:n_blocks]
+    # select first x blocks with lowest attack strength
+    best_blocks = sorted(blocks, key=lambda k: k['attack_strength'])[:N_BLOCKS]
     block_positions = [block['locations'] for block in best_blocks]
         
     # order blocks based on their location, so they can be retrieved in a deterministic order
     return sorted(block_positions)
 
-def embedding(image_path, watermark_path, alpha, dwt_level):
+def embedding(image_path, watermark_path):
     """Embed watermark using DWT-SVD with block selection."""
     
     image = cv2.imread(image_path, 0)
     Swm = get_watermark_S(watermark_path)
 
-    # TODO: try more attempts at using normalization to remove huge first watermark
-    # Swm = ((Swm - 0.1) / (15 - 0.1)) + 1 # Normalization step
-    # print(Swm)
-    # print(Swm*100)
-
     strength_map = attack_strength_map(image)
 
-    blocks = select_best_blocks(image, strength_map, BLOCKS_TO_EMBED, BLOCK_SIZE)
+    blocks = select_best_blocks(image, strength_map)
 
     for idx, (x,y) in enumerate(blocks):
         block_location = (slice(x, x + BLOCK_SIZE), slice(y, y + BLOCK_SIZE))
@@ -100,14 +88,11 @@ def embedding(image_path, watermark_path, alpha, dwt_level):
         # SVD
         Ub, Sb, Vb = np.linalg.svd(LLb)
 
-        # Watermark singular values for this block
-        # wm_start = idx * shape_LL_tmp
-        # wm_end = wm_start + shape_LL_tmp
-        # print(f"wm_start: {wm_start}, wm_end: {wm_end}, len(Swm): {len(Swm)}")
-
-        #TODO: Need to change the logic if we want more than 32 blocks
         Sb[0] += Swm[idx] * ALPHA
+
+        # iSVD
         LLnew = Ub.dot(np.diag(Sb)).dot(Vb)
+        # iDWT
         coeffs[0] = LLnew
         block_watermarked = pywt.waverec2(coeffs, wavelet='haar')
         
