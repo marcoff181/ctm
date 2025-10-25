@@ -1,19 +1,9 @@
 import os
-import time
 import pywt
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt  
-
-from wpsnr import wpsnr
-
-
-# DUE TO SELF CONTAINED NATURE
-ALPHA = 5.0
-N_BLOCKS = 16
-BLOCK_SIZE = 16
-WATERMARK_SIZE = 1024
-MIN_WPSNR = 35.00
+import matplotlib.pyplot as plt
+from scipy.signal import convolve2d
 
 Uwm = np.array(
 [[-2.31267458e-01  ,5.73428696e-02 ,-2.26156433e-01  ,1.30579290e-01 ,-5.81210093e-03  ,1.38494753e-01  ,1.74246841e-01 ,-5.55574921e-02  ,7.71068824e-02  ,1.13620622e-01  ,2.03035610e-01  ,9.10635146e-02  ,2.08595775e-01 ,-2.42470021e-01 ,-1.11385100e-01 ,-2.07218918e-01  ,2.89637010e-01  ,3.66299869e-01 ,-7.33106387e-02  ,1.48494224e-01 ,-2.56492373e-01  ,2.16943705e-01  ,1.67666511e-03  ,8.70096585e-02 ,-2.01149970e-01 ,-1.89513387e-01 ,-2.40338304e-01 ,-1.15414849e-01  ,2.59539121e-01  ,1.20545652e-01 ,-8.00391995e-03  ,3.18239287e-02],
@@ -85,31 +75,183 @@ Vwm = np.array(
  [ 3.38024053e-01 ,-1.20438636e-01  ,1.39515378e-02  ,1.83792650e-01 ,-2.69843455e-02  ,6.48550972e-02 ,-1.30501561e-01  ,2.55264710e-01  ,1.47048585e-01 ,-1.40324141e-01 ,-8.66521971e-03 ,-3.32686125e-02 ,-3.02344354e-01  ,6.60229157e-02 ,-2.75855058e-01  ,1.32296710e-01 ,-1.30709950e-01 ,-2.68407937e-01  ,2.15943185e-01 ,-1.91231309e-02  ,2.05205499e-02  ,1.66797682e-01  ,1.38854625e-01 ,-7.21314594e-02 ,-1.05590051e-01  ,1.44185703e-01 ,-2.28930888e-01 ,-1.94790927e-02 ,-2.92807143e-01  ,2.57244614e-01  ,2.17571533e-01 ,-2.13171975e-01]]
 )
 
+# embedded parameters
+ALPHA = 5.0
+N_BLOCKS = 16
+BLOCK_SIZE = 16
+WATERMARK_SIZE = 1024
+MIN_WPSNR = 35.00
+
+
+def _csffun(u, v):
+    """
+    Computes the Contrast Sensitivity Function (CSF) value for given spatial frequencies.
+    This is a Python translation of csffun.m.
+    """
+    # Calculate radial frequency
+    f = np.sqrt(u**2 + v**2)
+    w = 2 * np.pi * f / 60
+
+    # Intermediate spatial frequency response
+    sigma = 2
+    Sw = 1.5 * np.exp(-(sigma**2) * w**2 / 2) - np.exp(-2 * sigma**2 * w**2 / 2)
+
+    # High-frequency modification
+    sita = np.arctan2(v, u)  # Use arctan2 for quadrant correctness
+    bita = 8
+    f0 = 11.13
+    w0 = 2 * np.pi * f0 / 60
+
+    # Avoid division by zero or overflow in exp
+    exp_term = np.exp(bita * (w - w0))
+    Ow = (1 + exp_term * (np.cos(2 * sita)) ** 4) / (1 + exp_term)
+
+    # Final response
+    Sa = Sw * Ow
+    return Sa
+
+
+def _csfmat():
+    """
+    Computes the CSF frequency response matrix.
+    This is a Python translation of csfmat.m.
+    """
+    # Define frequency range
+    min_f, max_f, step_f = -20, 20, 1
+    freq_range = np.arange(min_f, max_f + step_f, step_f)
+    n = len(freq_range)
+
+    # Create frequency grids
+    u, v = np.meshgrid(freq_range, freq_range, indexing="xy")
+
+    # Compute the frequency response matrix by calling _csffun
+    Fmat = _csffun(u, v)
+
+    return Fmat
+
+
+def _get_csf_filter():
+    """
+    Computes the 2D filter coefficients for the CSF.
+    This is a Python translation of csf.m, which uses fsamp2.
+    The fsamp2 function is implemented using an inverse Fourier transform.
+    """
+    # 1. Get the frequency response matrix
+    Fmat = _csfmat()
+
+    # 2. Compute the 2D filter coefficients using the frequency sampling method
+    # This is equivalent to MATLAB's fsamp2(Fmat)
+    # The shifts are necessary to handle the centered frequency response
+    filter_coeffs = np.fft.ifftshift(np.fft.ifft2(np.fft.ifftshift(Fmat)))
+
+    # The filter coefficients should be real
+    return np.real(filter_coeffs)
+
+
+def wpsnr(image_a, image_b):
+    """
+    Computes the Weighted Peak Signal-to-Noise Ratio (WPSNR) between two images.
+
+    This function is a Python translation of the provided WPSNR.m script. It uses a
+    Contrast Sensitivity Function (CSF) to weigh the spatial frequencies of the error image.
+
+    Args:
+        image_a (np.ndarray): The original image, as a NumPy array.
+                              Values can be uint8 (0-255) or float (0.0-1.0).
+        image_b (np.ndarray): The distorted image, as a NumPy array.
+                              Must have the same dimensions and type as image_a.
+
+    Returns:
+        float: The WPSNR value in decibels (dB).
+    """
+    # --- Data validation and normalization ---
+    if not isinstance(image_a, np.ndarray) or not isinstance(image_b, np.ndarray):
+        raise TypeError("Input images must be NumPy arrays.")
+
+    if image_a.shape != image_b.shape:
+        raise ValueError("Input images must have the same dimensions.")
+
+    # Normalize images to the [0, 1] range if they are not already floats
+    if image_a.dtype != np.float64 and image_a.dtype != np.float32:
+        A = image_a.astype(np.float64) / 255.0
+    else:
+        A = image_a.copy()
+
+    if image_b.dtype != np.float64 and image_b.dtype != np.float32:
+        B = image_b.astype(np.float64) / 255.0
+    else:
+        B = image_b.copy()
+
+    if A.max() > 1.0 or A.min() < 0.0 or B.max() > 1.0 or B.min() < 0.0:
+        raise ValueError(
+            "Input image values must be in the interval [0, 1] for floats or [0, 255] for integers."
+        )
+
+    # --- WPSNR Calculation ---
+    # Handle identical images case
+    if np.array_equal(A, B):
+        return 9999999.0  # Return a large number for infinite PSNR, as in the original code
+
+    # 1. Calculate the error image
+    error_image = A - B
+
+    # 2. Get the Contrast Sensitivity Function (CSF) filter
+    csf_filter = _get_csf_filter()
+
+    # 3. Filter the error image with the CSF filter (2D convolution)
+    # This is equivalent to MATLAB's filter2(fc, e)
+    weighted_error = convolve2d(error_image, csf_filter, mode="same", boundary="wrap")
+
+    # 4. Calculate the weighted mean squared error (WMSE)
+    wmse = np.mean(weighted_error**2)
+
+    # 5. Calculate WPSNR
+    # The peak signal value is 1.0 because the images are normalized
+    if wmse == 0:
+        return (
+            9999999.0  # Should be caught by the identity check, but included for safety
+        )
+
+    decibels = 20 * np.log10(1.0 / np.sqrt(wmse))
+
+    return decibels
+
+
 def detection(original_path, watermarked_path, attacked_path):
+    """Detect if watermark is present in the attacked image.
+
+    Args:
+        original_path (str): Path to the original image.
+        watermarked_path (str): Path to the watermarked image.
+        attacked_path (str): Path to the attacked image.
+
+    Returns:
+        tuple: (detection_result, wpsnr_value)
+    """
 
     original_image = cv2.imread(original_path, 0).copy()
     watermarked_image = cv2.imread(watermarked_path, 0).copy()
     attacked_image = cv2.imread(attacked_path, 0).copy()
 
     original_watermark = extraction(
-        original_image, 
-        watermarked_image, 
+        original_image,
+        watermarked_image,
         watermarked_image,
     )
     watermark_extracted = extraction(
-        original_image, 
-        watermarked_image, 
+        original_image,
+        watermarked_image,
         attacked_image,
     )
 
     sim = similarity(original_watermark, watermark_extracted)
     # TODO: compute T after all changes are made
-    T = 0.55 # Computed threshold using ROC curve analysis
+    T = 0.55  # Computed threshold using ROC curve analysis
     wpsnr_value = wpsnr(watermarked_image, attacked_image)
 
     # TODO: add this print if you want to check why the detection failed
     # if sim > T and wpsnr_value <= MIN_WPSNR:
-    #     print("[DETECTION] failed becasue of too low wPNSR!") 
+    #     print("[DETECTION] failed becasue of too low wPNSR!")
 
     detected = 1 if sim > T and wpsnr_value > MIN_WPSNR else 0
     return detected, wpsnr_value
@@ -122,34 +264,35 @@ def identify_watermarked_blocks(original_image, watermarked_image):
 
     for i in range(0, original_image.shape[0], BLOCK_SIZE):
         for j in range(0, original_image.shape[1], BLOCK_SIZE):
-            block_diff = difference[i:i + BLOCK_SIZE, j:j + BLOCK_SIZE]
+            block_diff = difference[i : i + BLOCK_SIZE, j : j + BLOCK_SIZE]
             # Block contains watermark if average difference is non-zero
             if np.mean(block_diff) > 0:
                 blocks_with_watermark.append((i, j))
     return blocks_with_watermark
 
+
 def extract_singular_values(original_image, attacked_image, blocks):
     """
-    Extract singular values from each selected block. 
+    Extract singular values from each selected block.
     - *Remember that a single singular value (of the watermark) is embedded in the first Singular value of block's LL*
     """
     extracted_S = np.zeros(32, dtype=np.uint8)
 
-    for idx, (x,y) in enumerate(blocks):
-        block_attacked = attacked_image[x:x + BLOCK_SIZE, y:y + BLOCK_SIZE]
-        block_original = original_image[x:x + BLOCK_SIZE, y:y + BLOCK_SIZE]
-        
-        LL_attacked = pywt.wavedec2(block_attacked, wavelet='haar', level=1)[0]
-        LL_original = pywt.wavedec2(block_original, wavelet='haar', level=1)[0]
+    for idx, (x, y) in enumerate(blocks):
+        block_attacked = attacked_image[x : x + BLOCK_SIZE, y : y + BLOCK_SIZE]
+        block_original = original_image[x : x + BLOCK_SIZE, y : y + BLOCK_SIZE]
 
-        _, S_attacked, _ = np.linalg.svd(LL_attacked) 
+        LL_attacked = pywt.wavedec2(block_attacked, wavelet="haar", level=1)[0]
+        LL_original = pywt.wavedec2(block_original, wavelet="haar", level=1)[0]
+
+        _, S_attacked, _ = np.linalg.svd(LL_attacked)
         _, S_original, _ = np.linalg.svd(LL_original)
-        
+
         # Compute Singular value difference
         S_diff = (S_attacked[0] - S_original[0]) / ALPHA
 
         # Quando ho scritto questo codice, solo dio sa perche' ho messo abs(), ma il ROC migliora di 100%
-        extracted_S[idx] = abs(S_diff) 
+        extracted_S[idx] = abs(S_diff)
         # if idx == 0:
         #     print(extracted_S[idx])
 
@@ -158,8 +301,8 @@ def extract_singular_values(original_image, attacked_image, blocks):
 
 def extraction(original_image, watermarked_image, attacked_image):
     blocks_with_watermark = identify_watermarked_blocks(
-        original_image, 
-        watermarked_image, 
+        original_image,
+        watermarked_image,
     )
 
     extracted_S = extract_singular_values(
@@ -171,7 +314,7 @@ def extraction(original_image, watermarked_image, attacked_image):
     # Reconstruct watermark from singular values
     watermark_matrix = Uwm.dot(np.diag(extracted_S)).dot(Vwm)
     watermark_extracted = watermark_matrix.flatten()
-    
+
     # Binarize
     watermark_extracted = (watermark_extracted > 0.5).astype(np.uint8)
 
@@ -192,7 +335,10 @@ def similarity(X, X_star):
 
     return similarity_score
 
-def verify_watermark_extraction(original, watermarked, attacked, mark_path, dwt_level=1, output_prefix=""):
+
+def verify_watermark_extraction(
+    original, watermarked, attacked, mark_path, dwt_level=1, output_prefix=""
+):
     """Verify that the embedded watermark can be correctly extracted."""
     print("\n" + "=" * 80)
     print("WATERMARK EXTRACTION VERIFICATION")
@@ -203,7 +349,7 @@ def verify_watermark_extraction(original, watermarked, attacked, mark_path, dwt_
 
     # Extract watermark from watermarked image (no attack)
     extracted_watermark = extraction(original, watermarked, watermarked)
-    
+
     # Compute similarity
     sim = similarity(original_watermark, extracted_watermark)
 
@@ -384,7 +530,7 @@ def verify_watermark_extraction(original, watermarked, attacked, mark_path, dwt_
     )
     print(f"\nSaved overview plot to: {output_path1}")
     plt.close(fig1)
-    
+
     print("=" * 80 + "\n")
 
     return {
