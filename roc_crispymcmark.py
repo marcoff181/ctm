@@ -4,12 +4,13 @@ import cv2
 import os
 import numpy as np
 from attack_functions import awgn, blur, jpeg_compression, median, resizing, sharpening
-import embedding, detection
+import embedding, detection_crispymcmark as detection_crispymcmark
 from matplotlib import pyplot as plt
 from scipy.ndimage import gaussian_filter
 from scipy.signal import medfilt
 
 from attack import attack_config
+
 
 def similarity(X, X_star):
     """Compute bit error rate (BER) based similarity for binary watermarks"""
@@ -24,6 +25,7 @@ def similarity(X, X_star):
     similarity_score = matches / total
 
     return similarity_score
+
 
 def random_attack(img):
     # Select a random attack from attack_config
@@ -41,14 +43,14 @@ def random_attack(img):
 #     strength_map = np.zeros((512, 512), dtype=np.uint64)
 #
 #     steps = 10
-#     attack_range = np.linspace(0.0,1.0,steps) 
+#     attack_range = np.linspace(0.0,1.0,steps)
 #     n_of_attacks = len(attack_config) * steps
 #
 #
 #     for attack in attack_config.values():
 #         for x in attack_range:
 #             attacked = attack(original_image.copy(),x)
-#             diff = attacked - original_image 
+#             diff = attacked - original_image
 #             strength_map +=  diff
 #
 #     #divide by n_of_attacks to get back to the uint8 scale
@@ -65,9 +67,9 @@ def compute_roc():
 
     sample_images = []
     # loop for importing images from sample_images folder
-    for filename in os.listdir('images'):
+    for filename in os.listdir("images"):
         if filename.endswith(".bmp"):
-            path_tmp = os.path.join('images', filename)
+            path_tmp = os.path.join("images", filename)
             sample_images.append(path_tmp)
 
     sample_images.sort()
@@ -86,14 +88,16 @@ def compute_roc():
     labels = []
 
     for i in range(0, len(sample_images)):
-    # for i in range(0, 5):
+        # for i in range(0, 5):
 
         original_image = sample_images[i]
 
         watermarked_image = embedding.embedding(original_image, watermark_path)
         # just to check how visible is the mark
         name = original_image.split("/")[1]
-        cv2.imwrite("./watermarked_groups_images/crispymcmark_"+name ,watermarked_image)
+        cv2.imwrite(
+            "./watermarked_groups_images/crispymcmark_" + name, watermarked_image
+        )
 
         # ================== ADDITIONS NOT REQUIRED IN CHALLENGE RULES ==========
         # othermark = np.random.uniform(0.0, 1.0, watermark_size)
@@ -103,8 +107,8 @@ def compute_roc():
         # ====================================================================
 
         original_image = cv2.imread(original_image, 0)
-        print(sample_images[i], end = '\r')
-        #plot original and watermarked image
+        print(sample_images[i], end="\r")
+        # plot original and watermarked image
         # plt.subplot(1, 2, 1)
         # plt.imshow(original_image, cmap='gray')
         # plt.title('Original image')
@@ -123,7 +127,9 @@ def compute_roc():
             attacked_image = random_attack(watermarked_image)
 
             # check we are extracting the correct mark from an attacked image
-            extracted_watermark = detection.extraction(original_image, watermarked_image, attacked_image)
+            extracted_watermark = detection_crispymcmark.extraction(
+                original_image, watermarked_image, attacked_image
+            )
 
             scores.append(similarity(watermark, extracted_watermark))
             labels.append(1)
@@ -144,9 +150,10 @@ def compute_roc():
             # scores.append(similarity(fakemark, extracted_othermark))
             # labels.append(0)
 
-
             # check that passing original as attacked does not find watermark
-            extracted_watermark = detection.extraction(original_image, watermarked_image, original_image)
+            extracted_watermark = detection_crispymcmark.extraction(
+                original_image, watermarked_image, original_image
+            )
 
             scores.append(similarity(watermark, extracted_watermark))
             labels.append(0)
@@ -159,46 +166,49 @@ def compute_roc():
     # print('Scores:', scores)
     # print('Labels:', labels)
 
-
     # compute ROC
-    fpr, tpr, tau = roc_curve(np.asarray(labels), np.asarray(scores), drop_intermediate=False)
+    fpr, tpr, tau = roc_curve(
+        np.asarray(labels), np.asarray(scores), drop_intermediate=False
+    )
     # compute AUC
     roc_auc = auc(fpr, tpr)
 
     plt.figure()
     lw = 2
-    plt.plot(fpr,
-             tpr,
-             color='darkorange',
-             lw=lw,
-             label='AUC = %0.2f' % roc_auc)
-    plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+    plt.plot(fpr, tpr, color="darkorange", lw=lw, label="AUC = %0.2f" % roc_auc)
+    plt.plot([0, 1], [0, 1], color="navy", lw=lw, linestyle="--")
     plt.xlim([-0.01, 1.0])
     plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('Receiver operating characteristic example')
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("Receiver operating characteristic example")
     plt.legend(loc="lower right")
     plt.savefig("roc_crispymcmark.png", dpi=300, bbox_inches="tight")
 
+    rocs = zip(fpr, tpr, tau)
 
-    rocs = zip(fpr,tpr,tau)
-
-    fp, tp, T = sorted([r if r[0] < 0.0001 else (0,0,0)for r in rocs ],key = lambda k : k [1])[-1]
-    print(f'Choose this = FPR {fp:.4f} -> TPR: {tp:.2f} threshold: {T:.2f}')
-    rocs = zip(fpr,tpr,tau)
-    fp, tp, T = sorted([r if r[0] < 0.01 else (0,0,0)for r in rocs ],key = lambda k : k [1])[-1]
-    print(f'FPR<0.01    = FPR {fp:.4f} -> TPR: {tp:.2f} threshold: {T:.2f}')
-    rocs = zip(fpr,tpr,tau)
-    fp, tp, T = sorted([r if r[0] < 0.1 else (0,0,0)for r in rocs ],key = lambda k : k [1])[-1]
-    print(f'FPR<0.1     = FPR {fp:.4f} -> TPR: {tp:.2f} threshold: {T:.2f}')
-    rocs = zip(fpr,tpr,tau)
-    fp, tp, T = sorted(rocs,key = lambda k : k [1])[-1]
-    print(f'Highest TPR = FPR {fp:.4f} -> TPR: {tp:.2f} threshold: {T:.2f}')
+    fp, tp, T = sorted(
+        [r if r[0] < 0.0001 else (0, 0, 0) for r in rocs], key=lambda k: k[1]
+    )[-1]
+    print(f"Choose this = FPR {fp:.4f} -> TPR: {tp:.2f} threshold: {T:.2f}")
+    rocs = zip(fpr, tpr, tau)
+    fp, tp, T = sorted(
+        [r if r[0] < 0.01 else (0, 0, 0) for r in rocs], key=lambda k: k[1]
+    )[-1]
+    print(f"FPR<0.01    = FPR {fp:.4f} -> TPR: {tp:.2f} threshold: {T:.2f}")
+    rocs = zip(fpr, tpr, tau)
+    fp, tp, T = sorted(
+        [r if r[0] < 0.1 else (0, 0, 0) for r in rocs], key=lambda k: k[1]
+    )[-1]
+    print(f"FPR<0.1     = FPR {fp:.4f} -> TPR: {tp:.2f} threshold: {T:.2f}")
+    rocs = zip(fpr, tpr, tau)
+    fp, tp, T = sorted(rocs, key=lambda k: k[1])[-1]
+    print(f"Highest TPR = FPR {fp:.4f} -> TPR: {tp:.2f} threshold: {T:.2f}")
     plt.show()
 
     # end time
     end = time.time()
-    print('[COMPUTE ROC] Time: %0.2f seconds' % (end - start))
+    print("[COMPUTE ROC] Time: %0.2f seconds" % (end - start))
+
 
 compute_roc()
