@@ -2,13 +2,10 @@ import os
 import cv2
 import numpy as np
 from detection_crispymcmark import detection as crispy_detection
-import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
-from wpsnr import wpsnr
 
 import pandas as pd
 from attack_functions import awgn, blur, sharpening, median, resizing, jpeg_compression
-from utilities import edges_mask, noisy_mask, entropy_mask, show_images
+from utilities import edges_mask, noisy_mask, entropy_mask
 
 MIN_WPSNR = 35.00
 
@@ -112,67 +109,6 @@ def bin_search_attack(original_path, watermarked_path, detection, mask, iteratio
                 }
             )
     return best_attacks
-
-    return pd.DataFrame(results)
-
-
-# def double_bin_search_attack(original, watermarked, detection, mask, iterations):
-#     results = []
-#
-#     attack_pairs = list(combinations(attack_config.keys(), 2))
-#
-#     for attack_name_1,attack_name_2 in attack_pairs:
-#         attack_func_1 = attack_config[attack_name_1]
-#         attack_func_2 = attack_config[attack_name_2]
-#
-#         low_1, low_2, high_1, high_2 = 0.0, 0.0, 1.0, 1.0
-#         best_param, best_wpsnr = None, -np.inf
-#         best_attacked = None
-#
-#         for _ in range(iterations):
-#             # converged
-#             if abs(high_1 - low_1) < 1e-6 && abs(high_2 - low_2) < 1e-6:
-#                 break
-#
-#             mid_1 = (low_1 + high_1) / 2
-#             mid_2 = (low_2 + high_2) / 2
-#
-#             full_attacked_img = attack_func(watermarked.copy(), mid)
-#             attacked_img = np.where(mask, full_attacked_img, watermarked)
-#             detected, wpsnr_val = detection(original, watermarked, attacked_img)
-#             actual_param = param_converters[attack_name](mid)
-#
-#             if not detected:
-#                 best_param, best_wpsnr = mid, wpsnr_val
-#                 best_attacked = attacked_img.copy()
-#                 high = mid
-#             else:
-#                 low = mid
-#
-#         if best_param is not None:
-#             actual_param = param_converters[attack_name](best_param)
-#             print(
-#                 f"  ✓ {attack_name}: Optimal param = {actual_param:.4f} | WPSNR: {best_wpsnr:.2f} dB"
-#             )
-#             results.append(
-#                 {
-#                     "Attack": attack_name,
-#                     "Best_Parameter": actual_param,
-#                     "WPSNR": best_wpsnr,
-#                     "Status": "Removed",
-#                 }
-#             )
-#         else:
-#             print(f"  ✗ {attack_name}: Could not remove watermark")
-#             results.append(
-#                 {
-#                     "Attack": attack_name,
-#                     "Best_Parameter": np.nan,
-#                     "WPSNR": np.nan,
-#                     "Status": "Not Removed",
-#                 }
-#             )
-#     return pd.DataFrame(results)
 
 
 def full_attack(detection_functions):

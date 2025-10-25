@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pywt
 from matplotlib.patches import Patch
 from embedding import svd_flat_score, select_best_blocks, BLOCK_SIZE, N_BLOCKS
-from detection import identify_watermarked_blocks
+from detection_crispymcmark import identify_watermarked_blocks
 
 
 def plot_full_overview(
@@ -139,8 +139,7 @@ def main(image_path, watermarked_path):
     watermarked = cv2.imread(watermarked_path, 0)
     print(f"Loaded image: {image.shape}")
 
-    strength_map = np.zeros_like(image)
-    embedded_blocks = select_best_blocks(image, strength_map)
+    embedded_blocks = select_best_blocks(image)
     detected_blocks = identify_watermarked_blocks(image, watermarked)
 
     plot_full_overview(
