@@ -105,14 +105,18 @@ def detection(original_path, watermarked_path, attacked_path):
     sim = similarity(original_watermark, watermark_extracted)
     # TODO: compute T after all changes are made
     T = 0.55 # Computed threshold using ROC curve analysis
-    wpsnr_value = wpsnr(watermarked_image, attacked_image)    
+    wpsnr_value = wpsnr(watermarked_image, attacked_image)
+
+    # TODO: add this print if you want to check why the detection failed
+    # if sim > T and wpsnr_value <= MIN_WPSNR:
+    #     print("[DETECTION] failed becasue of too low wPNSR!") 
+
     detected = 1 if sim > T and wpsnr_value > MIN_WPSNR else 0
     return detected, wpsnr_value
 
 
 def identify_watermarked_blocks(original_image, watermarked_image):
-    """Identify blocks where watermark was embedded by detecting modifications."""
-    
+    """Identify blocks where watermark was embedded by detecting change."""
     blocks_with_watermark = []
     difference = watermarked_image - original_image
 
@@ -122,7 +126,6 @@ def identify_watermarked_blocks(original_image, watermarked_image):
             # Block contains watermark if average difference is non-zero
             if np.mean(block_diff) > 0:
                 blocks_with_watermark.append((i, j))
-
     return blocks_with_watermark
 
 def extract_singular_values(original_image, attacked_image, blocks):
@@ -301,32 +304,6 @@ def verify_watermark_extraction(original, watermarked, attacked, mark_path, dwt_
     cbar3 = plt.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04)
     cbar3.set_label("Error", fontsize=10)
 
-    # Confusion Matrix
-    ax4 = fig1.add_subplot(gs1[0, 3])
-    confusion = np.array(
-        [[both_zero, orig_zero_ext_one], [orig_one_ext_zero, both_one]]
-    )
-    im4 = ax4.imshow(confusion, cmap="Blues", aspect="auto")
-    ax4.set_xticks([0, 1])
-    ax4.set_yticks([0, 1])
-    ax4.set_xticklabels(["Extr: 0", "Extr: 1"], fontsize=10)
-    ax4.set_yticklabels(["Orig: 0", "Orig: 1"], fontsize=10)
-    ax4.set_title("Confusion Matrix", fontsize=12, fontweight="bold")
-    for i in range(2):
-        for j in range(2):
-            color = "white" if confusion[i, j] > confusion.max() / 2 else "black"
-            ax4.text(
-                j,
-                i,
-                f"{confusion[i, j]}\n({confusion[i, j]/total_bits*100:.1f}%)",
-                ha="center",
-                va="center",
-                color=color,
-                fontsize=10,
-                fontweight="bold",
-            )
-    cbar4 = plt.colorbar(im4, ax=ax4, fraction=0.046, pad=0.04)
-
     # Bottom row: Images
     ax5 = fig1.add_subplot(gs1[1, 0])
     ax5.imshow(original, cmap="gray")
@@ -372,7 +349,7 @@ def verify_watermark_extraction(original, watermarked, attacked, mark_path, dwt_
     False Neg:     {orig_one_ext_zero:4d}
 
     PARAMETERS
-    ALPHA (LH/HL):   {ALPHA:.2f}
+    ALPHA (LL):   {ALPHA:.2f}
 
     STATUS:          {status}
 """
@@ -407,58 +384,7 @@ def verify_watermark_extraction(original, watermarked, attacked, mark_path, dwt_
     )
     print(f"\nSaved overview plot to: {output_path1}")
     plt.close(fig1)
-
-
-    #TODO: fix block mask visualization: currently displaying same blocks for embedded and detected
-    # # --- Block mask visualization ---
-    # # Identify blocks where watermark was embedded (from embedding)
-    # blocks_embedded = identify_watermarked_blocks(
-    #     original, watermarked
-    # )
-    # # Identify blocks detected as watermarked (from extraction)
-    # blocks_detected = identify_watermarked_blocks(
-    #     original, watermarked
-    # )
-
-    # fig, ax = plt.subplots(figsize=(8, 8))
-    # ax.imshow(original, cmap="gray")
-    # ax.set_title("Watermark Block Locations", fontsize=16, fontweight="bold")
-    # ax.axis("off")
-
-    # embedded_set = set([tuple(b['locations']) for b in blocks_embedded])
-    # detected_set = set([tuple(b['locations']) for b in blocks_detected])
-
-    # for loc in embedded_set:
-    #     if loc in detected_set:
-    #         # Overlap: green border
-    #         rect = plt.Rectangle((loc[1], loc[0]), BLOCK_SIZE, BLOCK_SIZE, linewidth=2.5, edgecolor='green', facecolor='none', label='Embedded & Detected')
-    #         ax.add_patch(rect)
-    #     else:
-    #         # Embedded only: blue border
-    #         rect = plt.Rectangle((loc[1], loc[0]), BLOCK_SIZE, BLOCK_SIZE, linewidth=2, edgecolor='blue', facecolor='none', label='Embedded Block')
-    #         ax.add_patch(rect)
-
-    # for loc in detected_set:
-    #     if loc not in embedded_set:
-    #         # Detected only: orange border
-    #         rect = plt.Rectangle((loc[1], loc[0]), BLOCK_SIZE, BLOCK_SIZE, linewidth=2, edgecolor='orange', facecolor='none', label='Detected Block')
-    #         ax.add_patch(rect)
-
-    # # Custom legend
-    # from matplotlib.patches import Patch
-    # legend_elements = [
-    #     Patch(edgecolor='blue', facecolor='none', label='Embedded Block', linewidth=2),
-    #     Patch(edgecolor='orange', facecolor='none', label='Detected Block', linewidth=2),
-    #     Patch(edgecolor='green', facecolor='none', label='Embedded & Detected', linewidth=2.5)
-    # ]
-    # ax.legend(handles=legend_elements, loc='upper right', fontsize=12, frameon=True)
-
-    # plt.tight_layout()
-    # output_path2 = os.path.join("./", f"{output_prefix}block_mask_overlay.png")
-    # plt.savefig(output_path2, dpi=300, bbox_inches="tight", facecolor="white", edgecolor="none")
-    # plt.close(fig)
-
-
+    
     print("=" * 80 + "\n")
 
     return {
