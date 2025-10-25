@@ -30,7 +30,7 @@ def random_attack(img):
     attack_name = random.choice(list(attack_config.keys()))
     attack_func = attack_config[attack_name]
     # Random strength between 0.0 and 1.0
-    strength = random.uniform(0.0, 1.0)
+    strength = random.uniform(0.9, 1.0)
     attacked = attack_func(img, strength)
     # print(f"Applied attack: {attack_name} with strength {strength:.2f}")
     return attacked
