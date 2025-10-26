@@ -311,16 +311,23 @@ class AttackGUI:
         filename = os.path.basename(image_path)
         name_without_ext = os.path.splitext(filename)[0]
 
-        # Check if filename matches pattern: name_number (e.g., crispymcmark_0000)
-        match = re.match(r"^(.+)_(\d+)$", name_without_ext)
-
-        if not match:
+        # Check if filename contains underscore (e.g., luigi_lucia, crispymcmark_0000)
+        # Split on last underscore to get base_suffix pattern
+        if "_" not in name_without_ext:
             # Filename doesn't match watermarked pattern, clear detection context and skip
             self.detection_ctx = None
             self._update_detection_button_visibility()
             return
 
-        base_name = match.group(1)  # e.g., "crispymcmark"
+        # Split on the last underscore
+        parts = name_without_ext.rsplit("_", 1)
+        if len(parts) != 2:
+            self.detection_ctx = None
+            self._update_detection_button_visibility()
+            return
+
+        base_name = parts[0]  # e.g., "crispymcmark" or "luigi"
+        suffix = parts[1]  # e.g., "0000" or "lucia"
 
         # Construct detection module filename and locate it (current dir or parent project dir)
         detection_module_name = f"detection_{base_name}"
@@ -366,24 +373,14 @@ class AttackGUI:
             detection_function = detection_module.detection
 
             # Prepare paths for detection
-            # Extract base name and number from filename (e.g., crispymcmark_0005)
+            # Extract base name and suffix from filename (e.g., crispymcmark_0005 or luigi_lucia)
             ext = os.path.splitext(filename)[1]
-
-            # Extract number from filename
-            match_num = re.search(r"_(\d+)$", name_without_ext)
-            if not match_num:
-                print(
-                    f"[DETECTION] Could not extract number from filename: {name_without_ext}"
-                )
-                return
-
-            image_number = match_num.group(1)
 
             # Build paths using project structure the user described
             import glob
 
-            # 1) ORIGINAL (no watermark): in challenge_images/, arbitrary filename (letters/numbers) but containing the index
-            #    Strategy: find any file in challenge_images that ends with the target number before extension
+            # 1) ORIGINAL (no watermark): in challenge_images/, arbitrary filename (letters/numbers) but containing the suffix
+            #    Strategy: find any file in challenge_images that ends with the target suffix before extension
             original_dir = os.path.join(project_root, "challenge_images")
             original_path = None
             if os.path.isdir(original_dir):
@@ -391,13 +388,13 @@ class AttackGUI:
                 candidates = []
                 for e in exts:
                     candidates.extend(
-                        glob.glob(os.path.join(original_dir, f"*{image_number}.{e}"))
+                        glob.glob(os.path.join(original_dir, f"*{suffix}.{e}"))
                     )
-                # Prefer exact basename == number (e.g., 0005.bmp) if present, otherwise first candidate
+                # Prefer exact basename == suffix (e.g., lucia.bmp or 0005.bmp) if present, otherwise first candidate
                 exact = [
                     p
                     for p in candidates
-                    if os.path.splitext(os.path.basename(p))[0] == image_number
+                    if os.path.splitext(os.path.basename(p))[0] == suffix
                 ]
                 if exact:
                     original_path = exact[0]
@@ -406,15 +403,15 @@ class AttackGUI:
                 else:
                     original_path = None
 
-            # 2) WATERMARKED (no attack): in watermarked_groups_images/{base_name}_{number}.*
+            # 2) WATERMARKED (no attack): in watermarked_groups_images/{base_name}_{suffix}.*
             wm_dir = os.path.join(project_root, "watermarked_groups_images")
-            watermarked_path = os.path.join(wm_dir, f"{base_name}_{image_number}{ext}")
+            watermarked_path = os.path.join(wm_dir, f"{base_name}_{suffix}{ext}")
             if not os.path.exists(watermarked_path):
                 # Fallback to any known extension
                 exts = ["bmp", "png", "jpg", "jpeg"]
                 found = None
                 for e in exts:
-                    cand = os.path.join(wm_dir, f"{base_name}_{image_number}.{e}")
+                    cand = os.path.join(wm_dir, f"{base_name}_{suffix}.{e}")
                     if os.path.exists(cand):
                         found = cand
                         break
@@ -439,7 +436,7 @@ class AttackGUI:
             # Save detection context for later manual invocation
             self.detection_ctx = {
                 "base_name": base_name,
-                "image_number": image_number,
+                "image_suffix": suffix,
                 "original_path": original_path,
                 "watermarked_path": watermarked_path,
                 "project_root": project_root,
@@ -450,7 +447,7 @@ class AttackGUI:
             # Run detection
             print(f"\n{'='*60}")
             print(f"[DETECTION] Running watermark detection for: {filename}")
-            print(f"[DETECTION] Base name: {base_name}")
+            print(f"[DETECTION] Base name: {base_name}, Suffix: {suffix}")
             print(f"[DETECTION] Original: {os.path.basename(original_path)}")
             print(f"[DETECTION] Watermarked: {os.path.basename(watermarked_path)}")
             print(f"[DETECTION] Attacked: {os.path.basename(attacked_path)}")
@@ -491,7 +488,7 @@ class AttackGUI:
                     k in self.detection_ctx
                     for k in (
                         "base_name",
-                        "image_number",
+                        "image_suffix",
                         "original_path",
                         "watermarked_path",
                         "project_root",
@@ -521,7 +518,7 @@ class AttackGUI:
 
         try:
             base_name = self.detection_ctx["base_name"]
-            image_number = self.detection_ctx["image_number"]
+            suffix = self.detection_ctx["image_suffix"]
             original_path = self.detection_ctx["original_path"]
             watermarked_path = self.detection_ctx["watermarked_path"]
             project_root = self.detection_ctx["project_root"]
@@ -531,7 +528,7 @@ class AttackGUI:
             tmp_dir = os.path.join(project_root, "tmp_attacks")
             os.makedirs(tmp_dir, exist_ok=True)
             attacked_tmp_path = os.path.join(
-                tmp_dir, f"{base_name}_{image_number}_attacked_tmp.bmp"
+                tmp_dir, f"{base_name}_{suffix}_attacked_tmp.bmp"
             )
             cv2.imwrite(attacked_tmp_path, self.cv_image_modified)
 
