@@ -214,3 +214,4 @@ challenge_images/*
 attack_diffs/*
 tmp_attacks/*
 *.png
+attacks_log.csv
