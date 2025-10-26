@@ -3,6 +3,9 @@ import numpy as np
 import os
 import cv2
 
+from wpsnr import *
+from detection_crispymcmark import *
+
 
 def show_images(img, watermarked):
     plt.subplot(121)

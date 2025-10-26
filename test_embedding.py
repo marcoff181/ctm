@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 from embedding import embedding
-from detection import verify_watermark_extraction
+from utilities import verify_watermark_extraction
 from detection_crispymcmark import detection
 from wpsnr import wpsnr
 import attack
