@@ -142,7 +142,7 @@ The detection itself begins by locating the 16 hidden data blocks. This is done 
 
 This process yields a 32-value "fingerprint" (the singular values). To reconstruct the full watermark image, this fingerprint is mathematically combined with two hardcoded matrices (`Uwm` and `Vwm`), which represent the original watermark's structural SVD components. The resulting matrix is then flattened and binarized (converted to 0s and 1s) to create the final digital signature.
 
-Finally, the detection is a two-part test. First, the retrieved "test" signature is compared to the "clean" reference signature to get a bit-matching **similarity score**. Second, the perceptual **image quality** of the attacked image is measured using a **Weighted PSNR (WPSNR)**. The watermark is only considered "detected" if the similarity score is high (above 0.55, computed using the **ROC**) *and* the image quality is still acceptable (above the minimum WPSNR threshold, of $35 dB$).
+Finally, the detection is a two-part test. First, the retrieved watermark signature is compared to the "clean" reference watermark signature to get a bit-matching **similarity score**. Second, the perceptual **image quality** of the attacked image is measured using a **Weighted PSNR (WPSNR)**. The watermark is only considered "detected" if the similarity score is high (above 0.55, computed using the **ROC**) *and* the image quality is still acceptable (above the minimum WPSNR threshold, of $35 dB$).
 
 ### Attack
 
