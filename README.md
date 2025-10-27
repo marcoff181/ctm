@@ -143,6 +143,12 @@ Finally, the detection is a two-part test. First, the retrieved watermark signat
 
 The core of the attack is a **binary search**. For each of the six attack types (like JPEG, Blur, or Noise), the script doesn't just apply one strong, fixed attack. Instead, it intelligently searches for the "sweet spot": the **strongest attack parameter** (e.g., the lowest JPEG quality) that causes the detection function to *just* fail, while simultaneously ensuring the image's perceptual quality (measured by **WPSNR**) remains above a minimum threshold. This process is repeated with **masks**, applying the attack only to specific regions (like edges or noisy areas) where the watermark is likely hidden and the visual changes are less noticeable.
 
+### ROC calculation
+
+The computation of the ROC curve differs from the implementation explained in the challenge rules by adding a new null hypothesis ($H_{0}$) which is the extraction of the watermark from an attacked original (unwatermarked) image.
+
+We felt the need to add this step as it would create a AUC of 1.0 without it and it helps make the ROC curve more representative of real-world performance.
+
 ## Example Workflow
 
 1. **Embed watermark:**  
@@ -194,13 +200,20 @@ print(f"Detected: {detected}, WPSNR: {wpsnr_val:.2f} dB")
 ### Applying an Attack
 
 ```python
-from attack_functions import jpeg_compression
+from attack import attack_config, param_converters
 
 import cv2
-img = cv2.imread("./watermarked_groups_images/crispymcmark_0005.bmp", 0)
-attacked = jpeg_compression(img, quality=10)  # Apply strong JPEG compression
+img = cv2.imread("./watermarked_groups_images/crispymcmark_0002.bmp", 0)
 
-cv2.imwrite("./attacked_groups_images/crispymcmark_crispymcmark_0005.bmp", attacked)
+# Choose attack by name
+attack_name = "JPEG"  # or any key from attack_config
+strength = 0.9        # value between 0.0 and 1.0
+
+attack_func = attack_config[attack_name]
+params = param_converters[attack_name](strength)
+attacked = attack_func(img, strength)
+
+cv2.imwrite(f"./attacked_groups_images/crispymcmark_crispymcmark_0002_{attack_name}_{params}.bmp", attacked)
 ```
 
 ## License
