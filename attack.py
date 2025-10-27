@@ -127,11 +127,11 @@ def log_attack(detected, path, wpsnr, attack_name, params, mask):
         wpsnr_str = "" if wpsnr is None else f"{wpsnr:.2f}"
         if mask is not None:
             log.write(
-                f"{detected},{image},{group},{wpsnr_str},{attack_name}({params}),{mask}\n"
+                f'{detected},{image},{group},{wpsnr_str},"{attack_name}({params}),{mask}"\n'
             )
         else:
             log.write(
-                f"{detected},{image},{group},{wpsnr_str},{attack_name}({params})\n"
+                f'{detected},{image},{group},{wpsnr_str},"{attack_name}({params})"\n'
             )
 
 

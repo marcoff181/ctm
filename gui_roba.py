@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import os
 import ctypes  # For DPI awareness
+from attack import attack_config, param_converters, log_attack
 
 # --- Import Attack Functions ---
 try:
@@ -20,28 +21,6 @@ try:
     IMPORTS_OK = True
 except ImportError:
     IMPORTS_OK = False
-
-# --- Attack Configuration ---
-param_converters = {
-    "JPEG": lambda x: int(round((1 - x) * 95) + 5),  # Quality from 5 to 100
-    "Blur": lambda x: x * 5.0 + 0.1,  # Sigma from 0.1 to 5.1
-    "AWGN": lambda x: x * 50.0,  # Dev. std from 0 to 50
-    "Resize": lambda x: 1.0 - (x * 0.9 + 0.05),  # Scale from 0.95 to 0.05
-    "Median": lambda x: [1, 3, 5, 7][int(round(x * 3))],  # Kernel size 1, 3, 5, 7
-    "Sharp": lambda x: x * 5.0,  # Alpha from 0 to 5.0
-}
-
-attack_config = {
-    "JPEG": lambda img, x: jpeg_compression(img, quality=param_converters["JPEG"](x)),
-    "Blur": lambda img, x: blur(img, sigma=param_converters["Blur"](x)),
-    "AWGN": lambda img, x: awgn(img, std=param_converters["AWGN"](x)),
-    "Resize": lambda img, x: resizing(img, scale=param_converters["Resize"](x)),
-    "Median": lambda img, x: median(img, kernel_size=param_converters["Median"](x)),
-    "Sharp": lambda img, x: sharpening(
-        img, sigma=1.0, alpha=param_converters["Sharp"](x)
-    ),
-}
-
 
 try:
     RESAMPLE = Image.Resampling.LANCZOS
@@ -99,6 +78,9 @@ class AttackGUI:
         # Detection state
         self.detection_ctx = None  # dict with keys: base_name, image_number, original_path, watermarked_path, project_root, detection_function
 
+        # Attack history tracking for logging
+        self.attack_history = []  # List of dict: {attack_name, params, roi, mask_name}
+
         # Style for widgets
         style = ttk.Style()
         style.configure("TLabel", padding=5)
@@ -126,13 +108,16 @@ class AttackGUI:
 
         # Mask selection callback
         self.mask_var.trace_add("write", lambda *args: self._on_mask_selected())
+
     def _load_predefined_masks(self):
         """Load available mask filenames from 'masks/' folder."""
         mask_dir = os.path.join(os.path.dirname(__file__), "masks")
         masks = ["None"]
         if os.path.isdir(mask_dir):
             for f in os.listdir(mask_dir):
-                if f.lower().endswith((".png", ".bmp", ".jpg", ".jpeg", ".tif", ".tiff")):
+                if f.lower().endswith(
+                    (".png", ".bmp", ".jpg", ".jpeg", ".tif", ".tiff")
+                ):
                     masks.append(f)
         return masks
 
@@ -146,6 +131,7 @@ class AttackGUI:
         if mask_name in self.mask_functions:
             try:
                 import importlib
+
                 util = importlib.import_module("utilities")
                 func = getattr(util, self.mask_functions[mask_name])
                 mask = func(self.cv_image_modified)
@@ -223,7 +209,9 @@ class AttackGUI:
         attack_labelframe.pack(fill=tk.X, pady=5)
 
         # --- Mask Selection ---
-        ttk.Label(attack_labelframe, text="Predefined Mask:").pack(anchor=tk.W, padx=10, pady=(5, 0))
+        ttk.Label(attack_labelframe, text="Predefined Mask:").pack(
+            anchor=tk.W, padx=10, pady=(5, 0)
+        )
         mask_menu = ttk.Combobox(
             attack_labelframe,
             textvariable=self.mask_var,
@@ -365,6 +353,9 @@ class AttackGUI:
             self.cv_image_modified = self.cv_image_original.copy()
             self.image_path = path
             self.display_image(self.cv_image_modified)
+
+            # Reset attack history on new image load
+            self.attack_history = []
 
             # Check if image filename matches watermarked pattern (name_number.ext)
             self._check_and_run_detection(path)
@@ -950,7 +941,9 @@ class AttackGUI:
                 # Find mask pixels (mask==1)
                 mask_indices = np.where(mask_roi == 1)
                 if mask_indices[0].size == 0:
-                    messagebox.showinfo("Mask", "Selected mask does not cover the region.")
+                    messagebox.showinfo(
+                        "Mask", "Selected mask does not cover the region."
+                    )
                 else:
                     # Apply attack only to masked pixels
                     roi_for_attack = roi.copy()
@@ -963,11 +956,15 @@ class AttackGUI:
                             roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
                         else:
                             roi_gray = roi
-                        down = cv2.resize(roi_gray, (target_w, target_h), interpolation=cv2.INTER_AREA)
+                        down = cv2.resize(
+                            roi_gray, (target_w, target_h), interpolation=cv2.INTER_AREA
+                        )
                         up = cv2.resize(down, (w, h), interpolation=cv2.INTER_CUBIC)
                         attacked_pixels = up.astype(np.uint8)
                         if roi.ndim == 3 and roi.shape[2] == 3:
-                            attacked_pixels = cv2.cvtColor(attacked_pixels, cv2.COLOR_GRAY2BGR)
+                            attacked_pixels = cv2.cvtColor(
+                                attacked_pixels, cv2.COLOR_GRAY2BGR
+                            )
                     else:
                         attacked_pixels = attack_func(roi_for_attack, strength)
                     # Only update masked pixels
@@ -975,9 +972,13 @@ class AttackGUI:
                         attacked_roi[mask_indices] = attacked_pixels[mask_indices]
                     else:
                         for c in range(attacked_roi.shape[2]):
-                            attacked_roi[..., c][mask_indices] = attacked_pixels[..., c][mask_indices]
+                            attacked_roi[..., c][mask_indices] = attacked_pixels[
+                                ..., c
+                            ][mask_indices]
                     self.cv_image_modified[y : y + h, x : x + w] = attacked_roi
-                    print(f"Applied attack '{attack_name}' {param_converters[attack_name](strength)} on MASKED region x={x}, y={y}, w={w}, h={h}")
+                    print(
+                        f"Applied attack '{attack_name}' {param_converters[attack_name](strength)} on MASKED region x={x}, y={y}, w={w}, h={h}"
+                    )
             else:
                 # No mask: normal attack
                 if attack_name == "Resize":
@@ -988,7 +989,9 @@ class AttackGUI:
                         roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
                     else:
                         roi_gray = roi
-                    down = cv2.resize(roi_gray, (target_w, target_h), interpolation=cv2.INTER_AREA)
+                    down = cv2.resize(
+                        roi_gray, (target_w, target_h), interpolation=cv2.INTER_AREA
+                    )
                     up = cv2.resize(down, (w, h), interpolation=cv2.INTER_CUBIC)
                     attacked_roi = up.astype(np.uint8)
                     if roi.ndim == 3 and roi.shape[2] == 3:
@@ -996,7 +999,23 @@ class AttackGUI:
                 else:
                     attacked_roi = attack_func(roi.copy(), strength)
                 self.cv_image_modified[y : y + h, x : x + w] = attacked_roi
-                print(f"Applied attack '{attack_name}' {param_converters[attack_name](strength)} on region x={x}, y={y}, w={w}, h={h}")
+                print(
+                    f"Applied attack '{attack_name}' {param_converters[attack_name](strength)} on region x={x}, y={y}, w={w}, h={h}"
+                )
+
+            # Record attack in history for logging
+            actual_params = param_converters[attack_name](strength)
+            mask_name = self.mask_var.get() if self.mask_image is not None else None
+            roi_str = f"x={x},y={y},w={w},h={h}"
+
+            self.attack_history.append(
+                {
+                    "attack_name": attack_name,
+                    "params": actual_params,
+                    "roi": roi_str,
+                    "mask_name": mask_name,
+                }
+            )
 
             # Mantieni la vista corrente e ri-renderizza all'attuale zoom
             current_view = (self.canvas.xview(), self.canvas.yview())
@@ -1016,6 +1035,9 @@ class AttackGUI:
 
         self.cv_image_modified = self.cv_image_original.copy()
         self.display_image(self.cv_image_modified)  # display_image also resets the view
+
+        # Clear attack history on reset
+        self.attack_history = []
         print("Image restored to original.")
 
     def save_image(self):
@@ -1041,11 +1063,85 @@ class AttackGUI:
         try:
             cv2.imwrite(path, self.cv_image_modified)
             print(f"Image saved to: {path}")
+
+            # Log attacks to CSV if any attacks were applied
+            if self.attack_history:
+                self._log_attacks_to_csv(path)
+
             messagebox.showinfo(
                 "Save Complete", f"Image saved successfully to:\n{path}"
             )
         except Exception as e:
             messagebox.showerror("Save Error", f"Could not save image:\n{e}")
+
+    def _log_attacks_to_csv(self, saved_path):
+        """Log all attacks from attack_history to attacks_log.csv using log_attack."""
+        try:
+            # Determine if watermark was detected (if detection context is available)
+            detected = None
+            wpsnr_val = None
+
+            if self.detection_ctx:
+                try:
+                    # Run detection on saved image
+                    detection_function = self.detection_ctx["detection_function"]
+                    original_path = self.detection_ctx["original_path"]
+                    watermarked_path = self.detection_ctx["watermarked_path"]
+
+                    result = detection_function(
+                        original_path, watermarked_path, saved_path
+                    )
+
+                    if isinstance(result, tuple):
+                        detected, wpsnr_val = result
+                    else:
+                        detected = result
+                        wpsnr_val = None
+
+                except Exception as e:
+                    print(f"[WARNING] Could not run detection for logging: {e}")
+
+            # Format attack string: combine all attacks with their ROIs
+            # Example: "JPEG(50)@x=10,y=20,w=100,h=100 | Blur(0.5)@x=50,y=60,w=80,h=90"
+            attack_entries = []
+            for attack_info in self.attack_history:
+                attack_name = attack_info["attack_name"]
+                params = attack_info["params"]
+                roi = attack_info["roi"]
+                mask_name = attack_info["mask_name"]
+
+                # Format: AttackName(params)@ROI [mask: MaskName]
+                entry = f"{attack_name}({params})@{roi}"
+                if mask_name:
+                    entry += f" [mask:{mask_name}]"
+                attack_entries.append(entry)
+
+            combined_attacks = " | ".join(attack_entries)
+
+            # Get the first mask name if any (for backward compatibility with log_attack signature)
+            first_mask = None
+            for attack_info in self.attack_history:
+                if attack_info["mask_name"]:
+                    first_mask = attack_info["mask_name"]
+                    break
+
+            # Call log_attack from attack.py
+            # log_attack signature: log_attack(detected, path, wpsnr, attack_name, params, mask)
+            # We'll pass the combined attack string as attack_name and empty string as params
+            log_attack(
+                detected=detected if detected is not None else "Unknown",
+                path=saved_path,
+                wpsnr=wpsnr_val,
+                attack_name="GUI",
+                params=combined_attacks,
+                mask=first_mask,
+            )
+
+            print(f"[LOG] Saved attack log for {os.path.basename(saved_path)}")
+            print(f"[LOG] Attacks: {combined_attacks}")
+
+        except Exception as e:
+            print(f"[WARNING] Failed to log attacks to CSV: {e}")
 
     def _render_scaled_image(self):
         """Render the current cv_image_modified at the current zoom."""
