@@ -102,10 +102,8 @@ def entropy_mask(img, block_size=16, entropy_exp=3, energy_thr=50, percentile=3)
             scores.append((i, j, score))
 
     # Select blocks with highest scores (most likely to be used for embedding)
-    scores = sorted(scores, key=lambda x: x[2], reverse=True)
-    n_select = int(len(scores) * percentile / 100)
-    for idx in range(n_select):
-        i, j, _ = scores[idx]
+    scores = sorted(scores, key=lambda x: x[2], reverse=True)[:16]
+    for i, j, _ in scores:
         mask[i : i + block_size, j : j + block_size] = True
 
     return mask
