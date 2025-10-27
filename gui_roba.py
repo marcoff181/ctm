@@ -66,6 +66,17 @@ class AttackGUI:
         self.image_on_canvas = None  # Reference to the image object on the canvas
         self.image_path = None
 
+        # Mask variables
+        self.mask_var = tk.StringVar(value="None")
+        # Add mask functions from utilities.py
+        self.mask_functions = {
+            "Edges Mask (Canny)": "edges_mask",
+            "Noisy Mask": "noisy_mask",
+            "Entropy Mask": "entropy_mask",
+        }
+        self.masks = self._load_predefined_masks() + list(self.mask_functions.keys())
+        self.mask_image = None  # Loaded mask as numpy array
+
         # Selection variables
         self.selection_rect = None  # Reference to the selection rectangle
         self.start_x = 0
@@ -112,6 +123,56 @@ class AttackGUI:
 
         # --- FIX: Update the strength label on startup ---
         self.update_strength_label()
+
+        # Mask selection callback
+        self.mask_var.trace_add("write", lambda *args: self._on_mask_selected())
+    def _load_predefined_masks(self):
+        """Load available mask filenames from 'masks/' folder."""
+        mask_dir = os.path.join(os.path.dirname(__file__), "masks")
+        masks = ["None"]
+        if os.path.isdir(mask_dir):
+            for f in os.listdir(mask_dir):
+                if f.lower().endswith((".png", ".bmp", ".jpg", ".jpeg", ".tif", ".tiff")):
+                    masks.append(f)
+        return masks
+
+    def _on_mask_selected(self):
+        """Load the selected mask image or generate mask from function."""
+        mask_name = self.mask_var.get()
+        if mask_name == "None" or self.cv_image_modified is None:
+            self.mask_image = None
+            return
+        # If mask is a function, call it
+        if mask_name in self.mask_functions:
+            try:
+                import importlib
+                util = importlib.import_module("utilities")
+                func = getattr(util, self.mask_functions[mask_name])
+                mask = func(self.cv_image_modified)
+                # Convert boolean mask to uint8
+                mask = mask.astype(np.uint8)
+                self.mask_image = mask
+            except Exception as e:
+                print(f"[MASK ERROR] Could not generate mask '{mask_name}': {e}")
+                self.mask_image = None
+            return
+        # Otherwise, load mask from file
+        mask_dir = os.path.join(os.path.dirname(__file__), "masks")
+        mask_path = os.path.join(mask_dir, mask_name)
+        if not os.path.exists(mask_path):
+            self.mask_image = None
+            return
+        mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+        if mask is None:
+            self.mask_image = None
+            return
+        # Resize mask to match image size if needed
+        img_h, img_w = self.cv_image_modified.shape[:2]
+        if mask.shape != (img_h, img_w):
+            mask = cv2.resize(mask, (img_w, img_h), interpolation=cv2.INTER_NEAREST)
+        # Binarize mask: 0 for background, 1 for mask
+        mask = (mask > 127).astype(np.uint8)
+        self.mask_image = mask
 
     def _setup_dpi_awareness(self):
         """Set the application to be DPI-aware on Windows."""
@@ -160,6 +221,16 @@ class AttackGUI:
         # --- Attack Section ---
         attack_labelframe = ttk.LabelFrame(control_frame, text="Attack Parameters")
         attack_labelframe.pack(fill=tk.X, pady=5)
+
+        # --- Mask Selection ---
+        ttk.Label(attack_labelframe, text="Predefined Mask:").pack(anchor=tk.W, padx=10, pady=(5, 0))
+        mask_menu = ttk.Combobox(
+            attack_labelframe,
+            textvariable=self.mask_var,
+            values=self.masks,
+            state="readonly",
+        )
+        mask_menu.pack(fill=tk.X, padx=10, pady=5)
 
         ttk.Label(attack_labelframe, text="Attack Type:").pack(
             anchor=tk.W, padx=10, pady=(5, 0)
@@ -597,6 +668,9 @@ class AttackGUI:
             self.fit_to_window()
             self.clear_selection()
 
+            # Reload mask if selected
+            self._on_mask_selected()
+
         except Exception as e:
             messagebox.showerror("Display Error", f"Could not display image:\n{e}")
 
@@ -866,51 +940,69 @@ class AttackGUI:
 
         try:
             x, y, w, h = roi_coords
+
             roi = self.cv_image_modified[y : y + h, x : x + w]
 
-            attack_name = self.attack_var.get()
-
-            # Custom handling for Resize to avoid holes due to size rounding
-            if attack_name == "Resize":
-                scale = param_converters["Resize"](strength)
-                # Ensure minimal size of 1x1
-                target_w = max(1, int(round(w * scale)))
-                target_h = max(1, int(round(h * scale)))
-
-                # Work with grayscale ROI (2D). If color, convert to gray first.
-                if roi.ndim == 3 and roi.shape[2] == 3:
-                    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+            # If mask is selected and loaded, apply attack only to masked region
+            if self.mask_image is not None:
+                mask_roi = self.mask_image[y : y + h, x : x + w]
+                attacked_roi = roi.copy()
+                # Find mask pixels (mask==1)
+                mask_indices = np.where(mask_roi == 1)
+                if mask_indices[0].size == 0:
+                    messagebox.showinfo("Mask", "Selected mask does not cover the region.")
                 else:
-                    roi_gray = roi
-
-                down = cv2.resize(
-                    roi_gray, (target_w, target_h), interpolation=cv2.INTER_AREA
-                )
-                up = cv2.resize(down, (w, h), interpolation=cv2.INTER_CUBIC)
-                attacked_roi = up.astype(np.uint8)
-
-                # If original was color (unlikely in grayscale workflow), expand back
-                if roi.ndim == 3 and roi.shape[2] == 3:
-                    attacked_roi = cv2.cvtColor(attacked_roi, cv2.COLOR_GRAY2BGR)
-
+                    # Apply attack only to masked pixels
+                    roi_for_attack = roi.copy()
+                    # For Resize, apply to whole region then mask
+                    if attack_name == "Resize":
+                        scale = param_converters["Resize"](strength)
+                        target_w = max(1, int(round(w * scale)))
+                        target_h = max(1, int(round(h * scale)))
+                        if roi.ndim == 3 and roi.shape[2] == 3:
+                            roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                        else:
+                            roi_gray = roi
+                        down = cv2.resize(roi_gray, (target_w, target_h), interpolation=cv2.INTER_AREA)
+                        up = cv2.resize(down, (w, h), interpolation=cv2.INTER_CUBIC)
+                        attacked_pixels = up.astype(np.uint8)
+                        if roi.ndim == 3 and roi.shape[2] == 3:
+                            attacked_pixels = cv2.cvtColor(attacked_pixels, cv2.COLOR_GRAY2BGR)
+                    else:
+                        attacked_pixels = attack_func(roi_for_attack, strength)
+                    # Only update masked pixels
+                    if attacked_roi.ndim == 2:
+                        attacked_roi[mask_indices] = attacked_pixels[mask_indices]
+                    else:
+                        for c in range(attacked_roi.shape[2]):
+                            attacked_roi[..., c][mask_indices] = attacked_pixels[..., c][mask_indices]
+                    self.cv_image_modified[y : y + h, x : x + w] = attacked_roi
+                    print(f"Applied attack '{attack_name}' {param_converters[attack_name](strength)} on MASKED region x={x}, y={y}, w={w}, h={h}")
             else:
-                # Default path: call the configured attack function
-                attacked_roi = attack_func(roi.copy(), strength)
-
-            self.cv_image_modified[y : y + h, x : x + w] = attacked_roi
+                # No mask: normal attack
+                if attack_name == "Resize":
+                    scale = param_converters["Resize"](strength)
+                    target_w = max(1, int(round(w * scale)))
+                    target_h = max(1, int(round(h * scale)))
+                    if roi.ndim == 3 and roi.shape[2] == 3:
+                        roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                    else:
+                        roi_gray = roi
+                    down = cv2.resize(roi_gray, (target_w, target_h), interpolation=cv2.INTER_AREA)
+                    up = cv2.resize(down, (w, h), interpolation=cv2.INTER_CUBIC)
+                    attacked_roi = up.astype(np.uint8)
+                    if roi.ndim == 3 and roi.shape[2] == 3:
+                        attacked_roi = cv2.cvtColor(attacked_roi, cv2.COLOR_GRAY2BGR)
+                else:
+                    attacked_roi = attack_func(roi.copy(), strength)
+                self.cv_image_modified[y : y + h, x : x + w] = attacked_roi
+                print(f"Applied attack '{attack_name}' {param_converters[attack_name](strength)} on region x={x}, y={y}, w={w}, h={h}")
 
             # Mantieni la vista corrente e ri-renderizza all'attuale zoom
             current_view = (self.canvas.xview(), self.canvas.yview())
             self._render_scaled_image()
             self.canvas.xview_moveto(current_view[0][0])
             self.canvas.yview_moveto(current_view[1][0])
-
-            # self.clear_selection()
-            # print attack and converted parameter
-            print(
-                f"Applied attack '{attack_name}' {param_converters[attack_name](strength)} "
-                f"on region x={x}, y={y}, w={w}, h={h}"
-            )
 
         except Exception as e:
             messagebox.showerror(
