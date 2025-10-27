@@ -124,6 +124,7 @@ def compute_roc(save_watermarked_images=False):
 
             # random attack to watermarked image
             attacked_image = random_attack(watermarked_image)
+            attacked_original_image = random_attack(original_image)
 
             # check if we are extracting the correct mark from an attacked image
             extracted_watermark = extraction(
@@ -148,9 +149,9 @@ def compute_roc(save_watermarked_images=False):
             # scores.append(similarity(fakemark, extracted_othermark))
             # labels.append(0)
 
-            # check that passing original as attacked does not find watermark
+            # check that passing original(modified by attacks too) as attacked does not find watermark
             extracted_watermark = extraction(
-                original_image, watermarked_image, original_image
+                original_image, watermarked_image, attacked_original_image
             )
 
             scores.append(similarity(watermark, extracted_watermark))
