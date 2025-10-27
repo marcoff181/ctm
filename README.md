@@ -76,11 +76,6 @@ python crispy_embedder.py 5.0 0005.bmp
 
 Detect watermark in an attacked image:
 
-```sh
-python detection_crispymcmark.py
-```
-Or use the detection function in your script:
-
 ```python
 from detection_crispymcmark import detection
 
@@ -102,10 +97,10 @@ python attack.py
 
 ### 4. Visualize Embedding & Detection
 
-Generate professional visualizations:
+Generate visualizations:
 
 ```sh
-python visualize_embedding.py challenge_images/0005.bmp watermarked_groups_images/crispymcmark_0005.bmp
+python visualize_embedding.py <original_image_path> <watermarked_image_path> 
 ```
 
 ### 5. ROC Analysis
@@ -148,16 +143,6 @@ Finally, the detection is a two-part test. First, the retrieved watermark signat
 
 The core of the attack is a **binary search**. For each of the six attack types (like JPEG, Blur, or Noise), the script doesn't just apply one strong, fixed attack. Instead, it intelligently searches for the "sweet spot": the **strongest attack parameter** (e.g., the lowest JPEG quality) that causes the detection function to *just* fail, while simultaneously ensuring the image's perceptual quality (measured by **WPSNR**) remains above a minimum threshold. This process is repeated with **masks**, applying the attack only to specific regions (like edges or noisy areas) where the watermark is likely hidden and the visual changes are less noticeable.
 
-## Key Modules
-
-- [`embedding.py`](embedding.py): DWT-SVD watermark embedding, block selection.
-- [`detection_crispymcmark.py`](detection_crispymcmark.py): Watermark detection and WPSNR metric.
-- [`attack_functions.py`](attack_functions.py): Image attack implementations.
-- [`utilities.py`](utilities.py): Visualization, mask generation, extraction verification.
-- [`visualize_embedding.py`](visualize_embedding.py): Professional plots for embedding/detection logic.
-- [`roc_crispymcmark.py`](roc_crispymcmark.py): ROC curve and similarity analysis.
-- [`lsb/`](lsb/): LSB watermarking alternative.
-
 ## Example Workflow
 
 1. **Embed watermark:**  
@@ -174,7 +159,7 @@ The core of the attack is a **binary search**. For each of the six attack types 
 
 ## Example Python Usage
 
-You can use the main watermarking, attack, and detection functions directly from Python scripts, without calling them from the command line.
+You can also use the main watermarking, attack, and detection functions directly from Python scripts, without calling them from the command line.
 
 ### Embedding a Watermark
 
@@ -217,39 +202,6 @@ attacked = jpeg_compression(img, quality=10)  # Apply strong JPEG compression
 
 cv2.imwrite("./attacked_groups_images/crispymcmark_crispymcmark_0005.bmp", attacked)
 ```
-
-### Visualizing Embedding and Detection
-
-```python
-from visualize_embedding import plot_full_overview
-from embedding import select_best_blocks
-from detection_crispymcmark import identify_watermarked_blocks
-import cv2
-
-image = cv2.imread("./challenge_images/0005.bmp", 0)
-watermarked = cv2.imread("./watermarked_groups_images/crispymcmark_0005.bmp", 0)
-
-embedded_blocks = select_best_blocks(image)
-detected_blocks = identify_watermarked_blocks(image, watermarked)
-
-plot_full_overview(
-    image,
-    watermarked,
-    embedded_blocks,
-    detected_blocks,
-    save_path="full_embedding_detection_overview.png"
-)
-```
-
----
-
-## References
-
-- DWT-SVD watermarking: [embedding.py](embedding.py), [detection_crispymcmark.py](detection_crispymcmark.py)
-- LSB watermarking: [lsb/embedding_lsb.py](lsb/embedding_lsb.py), [lsb/detection_lsb.py](lsb/detection_lsb.py)
-- Attack functions: [attack_functions.py](attack_functions.py)
-- Quality metrics: [wpsnr.py](wpsnr.py), [roc_crispymcmark.py](roc_crispymcmark.py)
-- Visualization: [visualize_embedding.py](visualize_embedding.py), [utilities.py](utilities.py)
 
 ## License
 
