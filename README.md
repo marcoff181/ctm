@@ -203,9 +203,9 @@ from detection_crispymcmark import detection
 
 # Run detection on an attacked image
 detected, wpsnr_val = detection(
-    "./challenge_images/0005.bmp",                      # Original image
-    "./watermarked_groups_images/crispymcmark_0005.bmp",# Watermarked image
-    "./attacked_groups_images/crispymcmark_crispymcmark_0005.bmp" # Attacked image
+    "./challenge_images/image_name.bmp",                      # Original image
+    "./watermarked_groups_images/image_name_watermarked.bmp", # Watermarked image
+    "./attacked_groups_images/image_name_attacked.bmp"        # Attacked image
 )
 print(f"Detected: {detected}, WPSNR: {wpsnr_val:.2f} dB")
 ```
