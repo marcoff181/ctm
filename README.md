@@ -149,6 +149,8 @@ The computation of the ROC curve differs from the implementation explained in th
 
 We felt the need to add this step as it would create a AUC of 1.0 without it and it helps make the ROC curve more representative of real-world performance.
 
+![ROC](roc_crispymcmark.png)
+
 ## Example Workflow
 
 Before embedding a watermark, ensure that your images are present in the `challenge_images` folder.  
