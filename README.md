@@ -151,6 +151,17 @@ We felt the need to add this step as it would create a AUC of 1.0 without it and
 
 ## Example Workflow
 
+Before embedding a watermark, ensure that your images are present in the `challenge_images` folder.  
+You can copy all (or one) images from the `images` directory using:
+
+```sh
+cp images/*.bmp challenge_images/
+```
+
+```sh
+cp images/0005.bmp challenge_images/
+```
+
 1. **Embed watermark:**  
    `python crispy_embedder.py 5.0 0005.bmp`
 
