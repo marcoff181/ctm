@@ -1,12 +1,12 @@
 import cv2
 
 from utilities import verify_watermark_extraction
-from embedding import embedding
+from embedding import embedding, ALPHA as alpha
 from detection_crispymcmark import detection
 from wpsnr import wpsnr
 
 
-def main(alpha, image_name):
+def main(image_name):
     group_name = "crispymcmark"
     mark_path = f"{group_name}.npy"
 
@@ -42,6 +42,6 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 3:
-        print("Usage: python simple_embedder.py <alpha> <image_name>")
+        print("Usage: python simple_embedder.py <image_name>")
     else:
         main(sys.argv[1], sys.argv[2])
