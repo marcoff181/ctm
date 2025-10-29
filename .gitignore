@@ -213,5 +213,7 @@ watermarked_groups_images/*
 challenge_images/*
 attack_diffs/*
 tmp_attacks/*
-*.png
+attack_parameter_study_results.png 
+extraction_overview.png
+full_embedding_detection_overview.png
 attacks_log.csv

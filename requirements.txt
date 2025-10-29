@@ -22,3 +22,4 @@ six==1.17.0
 threadpoolctl==3.6.0
 tifffile==2025.5.10
 tzdata==2025.2
+ldpc==2.3.10
