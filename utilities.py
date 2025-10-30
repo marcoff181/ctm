@@ -114,7 +114,6 @@ def entropy_mask(img, block_size=16, entropy_exp=3, energy_thr=50, percentile=3)
     #     mark = np.uint8(np.rint(mark))
     #     np.save(mark_path, mark)
 
-
 def verify_watermark_extraction(
     original, watermarked, attacked, mark_path, dwt_level=1, output_prefix=""
 ):
@@ -127,7 +126,7 @@ def verify_watermark_extraction(
     original_watermark = np.load(mark_path)
 
     # Extract watermark from watermarked image (no attack)
-    extracted_watermark = extraction(original, watermarked, watermarked)
+    extracted_watermark, block_mask = extraction(original, watermarked, watermarked)
 
     # Compute similarity
     sim = similarity(original_watermark, extracted_watermark)

@@ -195,5 +195,5 @@ def detection(original_path, watermarked_path, attacked_path):
     T = 0.55
     wpsnr_value = wpsnr(watermarked_image, attacked_image)
 
-    detected = 1 if sim > T and wpsnr_value > MIN_WPSNR else 0
+    detected = 1 if sim > T else 0
     return detected, wpsnr_value

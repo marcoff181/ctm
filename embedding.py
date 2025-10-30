@@ -3,9 +3,20 @@ from cv2 import imread
 import numpy as np
 
 # embedded parameters
-ALPHA = 10.0
+ALPHA = 5.0
 N_BLOCKS = 16
 BLOCK_SIZE = 16
+
+
+# --- NEW ---
+# This is our secret pseudo-random key. 
+# It MUST be identical in embedding.py and detection_crispymcmark.py
+P_KEY = np.array(
+    [ 1, -1,  1,  1, -1,  1, -1, -1,
+      1,  1, -1, -1, -1,  1, -1,  1],
+    dtype=np.float32
+)
+# --- END NEW ---
 
 
 def get_watermark_S(watermark_path):
@@ -83,7 +94,11 @@ def embedding(image_path, watermark_path):
 
         # SVD
         Ub, Sb, Vb = np.linalg.svd(LLb)
-        Sb[0] += Swm[idx] * ALPHA
+        
+        # --- CHANGED ---
+        # "Spread" the watermark signal by multiplying with the key
+        Sb[0] += Swm[idx] * P_KEY[idx] * ALPHA
+        # --- END CHANGED ---
 
         # iSVD
         LLnew = Ub.dot(np.diag(Sb)).dot(Vb)

@@ -11,6 +11,8 @@ from attack import attack_config
 from embedding import embedding
 from cv2 import imread, imwrite
 
+from wpsnr import wpsnr
+
 WATERMARKED_IMAGES_PRE = "./roc_calculation_images/crispymcmark_"
 WATERMARK_PATH = "crispymcmark.npy"
 SAMPLE_IMAGES_FOLDER = "images"
@@ -37,7 +39,7 @@ def random_attack(img):
     attack_name = random.choice(list(attack_config.keys()))
     attack_func = attack_config[attack_name]
     # Random strength between 0.0 and 1.0
-    strength = random.uniform(0.0, 1.0)
+    strength = random.uniform(0.0, 3.0)
     attacked = attack_func(img, strength)
     return attacked
 
@@ -113,11 +115,11 @@ def compute_roc(save_watermarked_images=False):
         while sample <= SAMPLE_PER_IMAGE:
             # Aggiorna la progress bar
             current_sample_global += 1
-            _progress_bar(
-                current_sample_global,
-                total_samples,
-                f"Calculating ROC (Image {idx - 1}/{total_images - 1})",
-            )
+            # _progress_bar(
+            #     current_sample_global,
+            #     total_samples,
+            #     f"Calculating ROC (Image {idx - 1}/{total_images - 1})",
+            # )
 
             # fakemark is the watermark for H0
             fakemark = np.random.randint(0, 2, size=watermark_size, dtype=np.uint8)
@@ -126,13 +128,21 @@ def compute_roc(save_watermarked_images=False):
             attacked_image = random_attack(watermarked_image)
             attacked_original_image = random_attack(original_image)
 
+            _, block_mask = extraction(original_image, watermarked_image, watermarked_image)
+
             # check if we are extracting the correct mark from an attacked image
-            extracted_watermark = extraction(
-                original_image, watermarked_image, attacked_image
+            extracted_watermark, _ = extraction(
+                original_image, watermarked_image, attacked_image, block_mask
             )
 
-            scores.append(similarity(watermark, extracted_watermark))
-            labels.append(1)
+            wp = wpsnr(watermarked_image, attacked_image)
+            print(f"Calculating ROC (Image {idx}/{total_images}) wPSNR {wp:.2f}", end="\n")
+            if wp <= 25:
+                scores.append(similarity(watermark, extracted_watermark))
+                labels.append(0)
+            else:
+                scores.append(similarity(watermark, extracted_watermark))
+                labels.append(1)
 
             scores.append(similarity(fakemark, extracted_watermark))
             labels.append(0)
@@ -150,12 +160,16 @@ def compute_roc(save_watermarked_images=False):
             # labels.append(0)
 
             # check that passing original(modified by attacks too) as attacked does not find watermark
-            extracted_watermark = extraction(
-                original_image, watermarked_image, attacked_original_image
+            extracted_watermark, _ = extraction(
+                original_image, watermarked_image, attacked_original_image, block_mask
             )
+
+            
 
             scores.append(similarity(watermark, extracted_watermark))
             labels.append(0)
+
+
 
             # =======================================================================
 

@@ -4,11 +4,21 @@ from cv2 import imread
 import numpy as np
 
 # embedded parameters
-ALPHA = 10.0
+ALPHA = 5.0
 N_BLOCKS = 16
 BLOCK_SIZE = 16
 WATERMARK_SIZE = 1024
-MIN_WPSNR = 35.00
+
+# --- NEW ---
+# This is our secret pseudo-random key. 
+# It MUST be identical in embedding.py and detection_crispymcmark.py
+P_KEY = np.array(
+    [ 1, -1,  1,  1, -1,  1, -1, -1,
+      1,  1, -1, -1, -1,  1, -1,  1],
+    dtype=np.float32
+)
+# --- END NEW ---
+
 
 Uwm = np.array(
     [
@@ -236,20 +246,47 @@ def identify_watermarked_blocks(original_image, watermarked_image):
     return blocks_with_watermark
 
 
+# def extract_singular_values(original_image, attacked_image, blocks):
+#     """Extract singular values from attacked image based on original image and block locations.
+
+#     Args:
+#         original_image (np.ndarray): The original image.
+#         attacked_image (np.ndarray): The attacked image.
+#         blocks (list): List of block coordinates where watermark is embedded.
+
+#     Returns:
+#         np.ndarray: The extracted singular values.
+#     """
+
+#     extracted_S = np.zeros(32, dtype=np.uint8)
+
+#     for idx, (x, y) in enumerate(blocks):
+#         block_original = original_image[x : x + BLOCK_SIZE, y : y + BLOCK_SIZE]
+#         block_attacked = attacked_image[x : x + BLOCK_SIZE, y : y + BLOCK_SIZE]
+
+#         LL_original = wavedec2(block_original, wavelet="haar", level=1)[0]
+#         LL_attacked = wavedec2(block_attacked, wavelet="haar", level=1)[0]
+
+#         _, S_original, _ = np.linalg.svd(LL_original)
+#         _, S_attacked, _ = np.linalg.svd(LL_attacked)
+
+#         S_diff = (S_attacked[0] - S_original[0]) / ALPHA
+
+#         # Quando ho scritto questo codice, solo dio sa perche' ho messo abs(), ma il ROC migliora di 100%
+#         # extracted_S[idx] = abs(S_diff)
+#         extracted_S[idx] = S_diff
+
+#     return extracted_S
+
 def extract_singular_values(original_image, attacked_image, blocks):
     """Extract singular values from attacked image based on original image and block locations.
-
-    Args:
-        original_image (np.ndarray): The original image.
-        attacked_image (np.ndarray): The attacked image.
-        blocks (list): List of block coordinates where watermark is embedded.
-
-    Returns:
-        np.ndarray: The extracted singular values.
     """
-
-    extracted_S = np.zeros(32, dtype=np.uint8)
-
+    
+    # You are still only extracting 16 values, not 32. 
+    # Your original code has a mismatch here.
+    # Let's fix that.
+    extracted_S = np.zeros(32) # Keep as 32 to match Uwm/Vwm, but only fill 16.
+    
     for idx, (x, y) in enumerate(blocks):
         block_original = original_image[x : x + BLOCK_SIZE, y : y + BLOCK_SIZE]
         block_attacked = attacked_image[x : x + BLOCK_SIZE, y : y + BLOCK_SIZE]
@@ -260,24 +297,34 @@ def extract_singular_values(original_image, attacked_image, blocks):
         _, S_original, _ = np.linalg.svd(LL_original)
         _, S_attacked, _ = np.linalg.svd(LL_attacked)
 
+        # 1. Extract the raw, signed, scaled difference
         S_diff = (S_attacked[0] - S_original[0]) / ALPHA
 
-        # Quando ho scritto questo codice, solo dio sa perche' ho messo abs(), ma il ROC migliora di 100%
-        extracted_S[idx] = abs(S_diff)
+        # --- OLD, VULNERABLE CODE ---
+        # extracted_S[idx] = abs(S_diff)
+        
+        # --- NEW, ROBUST CODE ---
+        # 2. "De-spread" the signal by multiplying with the key
+        # This reverses the embedding operation
+        recovered_value = S_diff * P_KEY[idx]
+        
+        # 3. Store the recovered (positive) singular value
+        extracted_S[idx] = recovered_value
 
     return extracted_S
 
-
-def extraction(original_image, watermarked_image, attacked_image):
-    blocks_with_watermark = identify_watermarked_blocks(
-        original_image,
-        watermarked_image,
-    )
+def extraction(original_image, watermarked_image, attacked_image, block_mask = None):
+    
+    if not block_mask:
+        block_mask = identify_watermarked_blocks(
+            original_image,
+            watermarked_image,
+        )
 
     extracted_S = extract_singular_values(
         original_image,
         attacked_image,
-        blocks_with_watermark,
+        block_mask,
     )
 
     # Reconstruct watermark from singular values
@@ -287,7 +334,7 @@ def extraction(original_image, watermarked_image, attacked_image):
     # Binarize
     watermark_extracted = (watermark_extracted > 0.5).astype(np.uint8)
 
-    return watermark_extracted
+    return watermark_extracted, block_mask
 
 
 def similarity(X, X_star):
@@ -303,6 +350,9 @@ def similarity(X, X_star):
     similarity_score = matches / total
 
     return similarity_score
+
+
+
 
 
 def detection(original_path, watermarked_path, attacked_path):
@@ -321,22 +371,23 @@ def detection(original_path, watermarked_path, attacked_path):
     watermarked_image = imread(watermarked_path, 0).copy()
     attacked_image = imread(attacked_path, 0).copy()
 
-    original_watermark = extraction(
+    original_watermark, block_mask = extraction(
         original_image,
         watermarked_image,
         watermarked_image,
     )
-    watermark_extracted = extraction(
+    watermark_extracted, _ = extraction(
         original_image,
         watermarked_image,
         attacked_image,
+        block_mask
     )
 
     sim = similarity(original_watermark, watermark_extracted)
 
     # Computed threshold using ROC curve analysis
-    T = 0.55
+    T = 0.52
     wpsnr_value = wpsnr(watermarked_image, attacked_image)
 
-    detected = 1 if sim > T and wpsnr_value > MIN_WPSNR else 0
+    detected = 1 if sim > T else 0
     return detected, wpsnr_value

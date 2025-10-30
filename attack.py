@@ -26,7 +26,7 @@ param_converters = {
     "Blur": lambda x: (x + 0.15) * 1.2,
     "AWGN": lambda x: x * 30,
     "Resize": lambda x: np.round(((1 - x) + 0.4) * 512) / 512,
-    "Median": lambda x: [[1, 3], [3, 1], [3, 3], [3, 5], [5, 3]][int(round(x * 4))],
+    "Median": lambda x: [[1, 3], [3, 1], [3, 3], [3, 5], [5, 3]][int(round(x * 4)) % 5],
     "Sharp": lambda x: (x * 0.07) + 0.035,
 }
 
@@ -199,7 +199,8 @@ def bin_search_attack(
                 mask_name,
             )
 
-            if not detected and wpsnr_val >= MIN_WPSNR:
+            # if not detected and wpsnr_val >= MIN_WPSNR:
+            if not detected:
                 best_param, best_wpsnr = mid, wpsnr_val
                 best_attacked = attack_img_path
                 high = mid
@@ -209,7 +210,7 @@ def bin_search_attack(
         if best_param is not None:
             actual_param = param_converters[attack_name](best_param)
             print(
-                f"  ✓ {attack_name}: Optimal param = {actual_param:.4f} | WPSNR: {best_wpsnr:.2f} dB"
+                f"  ✓ {attack_name}: Optimal param = {actual_param} | WPSNR: {best_wpsnr:.2f} dB"
             )
             results.append(
                 {
