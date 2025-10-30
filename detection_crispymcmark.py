@@ -5,10 +5,8 @@ import numpy as np
 
 # embedded parameters
 ALPHA = 10.0
-N_BLOCKS = 16
-BLOCK_SIZE = 16
+BLOCK_SIZE = 8 
 WATERMARK_SIZE = 1024
-MIN_WPSNR = 35.00
 
 Uwm = np.array(
     [
@@ -262,9 +260,7 @@ def extract_singular_values(original_image, attacked_image, blocks):
 
         S_diff = (S_attacked[0] - S_original[0]) / ALPHA
 
-        # Quando ho scritto questo codice, solo dio sa perche' ho messo abs(), ma il ROC migliora di 100%
-        extracted_S[idx] = abs(S_diff)
-
+        extracted_S[idx] = S_diff if (S_diff < 25 and S_diff > 10) else 0.0
     return extracted_S
 
 
@@ -338,5 +334,5 @@ def detection(original_path, watermarked_path, attacked_path):
     T = 0.55
     wpsnr_value = wpsnr(watermarked_image, attacked_image)
 
-    detected = 1 if sim > T and wpsnr_value > MIN_WPSNR else 0
+    detected = 1 if sim > T else 0
     return detected, wpsnr_value

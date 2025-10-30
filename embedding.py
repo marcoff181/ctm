@@ -4,8 +4,8 @@ import numpy as np
 
 # embedded parameters
 ALPHA = 10.0
-N_BLOCKS = 16
-BLOCK_SIZE = 16
+N_BLOCKS = 8 
+BLOCK_SIZE = 8  
 
 
 def get_watermark_S(watermark_path):

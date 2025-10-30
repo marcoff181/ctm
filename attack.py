@@ -26,7 +26,7 @@ param_converters = {
     "Blur": lambda x: (x + 0.15) * 1.2,
     "AWGN": lambda x: x * 30,
     "Resize": lambda x: np.round(((1 - x) + 0.4) * 512) / 512,
-    "Median": lambda x: [[1, 3], [3, 1], [3, 3], [3, 5], [5, 3]][int(round(x * 4))],
+    "Median": lambda x: [[1, 3], [3, 1], [3, 3], [3, 5], [5, 3]][(int(round(x * 4)))% 5],
     "Sharp": lambda x: (x * 0.07) + 0.035,
 }
 
