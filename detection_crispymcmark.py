@@ -5,7 +5,7 @@ import numpy as np
 
 # embedded parameters
 ALPHA = 10.0
-BLOCK_SIZE = 8 
+BLOCK_SIZE = 8
 WATERMARK_SIZE = 1024
 
 Uwm = np.array(
@@ -260,7 +260,7 @@ def extract_singular_values(original_image, attacked_image, blocks):
 
         S_diff = (S_attacked[0] - S_original[0]) / ALPHA
 
-        extracted_S[idx] = S_diff if (S_diff < 25 and S_diff > 10) else 0.0
+        extracted_S[idx] = S_diff if (S_diff < 25 and S_diff > 0) else 0.0
     return extracted_S
 
 
@@ -331,7 +331,7 @@ def detection(original_path, watermarked_path, attacked_path):
     sim = similarity(original_watermark, watermark_extracted)
 
     # Computed threshold using ROC curve analysis
-    T = 0.55
+    T = 0.7
     wpsnr_value = wpsnr(watermarked_image, attacked_image)
 
     detected = 1 if sim > T else 0
