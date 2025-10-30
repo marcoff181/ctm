@@ -41,7 +41,7 @@ def main(image_name):
 if __name__ == "__main__":
     import sys
 
-    if len(sys.argv) < 3:
-        print("Usage: python simple_embedder.py <image_name>")
+    if len(sys.argv) < 2:
+        print("Usage: python crispy_embedder.py <image_name>")
     else:
-        main(sys.argv[1], sys.argv[2])
+        main(sys.argv[1])
