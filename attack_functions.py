@@ -1,4 +1,5 @@
 import os
+import tempfile
 import numpy as np
 from PIL import Image
 from scipy.ndimage import gaussian_filter
@@ -43,7 +44,8 @@ def resizing(img, scale=0.9):
 
 
 def jpeg_compression(img, quality=70):
-    temp_path = 'tmp.jpg'
+    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+        temp_path = tmp.name
     img_pil = Image.fromarray(img)
     img_pil.save(temp_path, "JPEG", quality=quality)
     result = Image.open(temp_path)
