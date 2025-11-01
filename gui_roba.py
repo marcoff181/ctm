@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import os
 import ctypes  # For DPI awareness
-from attack import attack_config, param_converters, log_attack
+from attack import attack_config, param_converters, log_attack, attack_mask
 
 # --- Import Attack Functions ---
 try:
@@ -31,36 +31,38 @@ except Exception:
 class AttackGUI:
     """Professional GUI application for applying image attacks."""
 
-    def __init__(self, root):
+    def __init__(self, root, scale=1.0):
         self.root = root
         self.root.title("Professional Image Attack Tool (Zoom/Pan)")
 
-        # Set correct DPI scaling (Windows only)
+        # DPI scaling (Windows only)
         self._setup_dpi_awareness()
+        self.scale = scale
 
         # State variables
         self.cv_image_original = None
         self.cv_image_modified = None
-        self.tk_image = None  # PhotoImage (ALWAYS FULL RESOLUTION)
-        self.image_on_canvas = None  # Reference to the image object on the canvas
+        self.tk_image = None
+        self.image_on_canvas = None
         self.image_path = None
 
         # Mask variables
         self.mask_var = tk.StringVar(value="None")
-        # Add mask functions from utilities.py
         self.mask_functions = {
             "Edges Mask (Canny)": "edges_mask",
             "Noisy Mask": "noisy_mask",
             "Entropy Mask": "entropy_mask",
+            "Attack Mask": "attack_mask",
+            "Frequency Mask": "frequency_mask",
+            "Saliency Mask": "saliency_mask",
         }
         self.masks = self._load_predefined_masks() + list(self.mask_functions.keys())
-        self.mask_image = None  # Loaded mask as numpy array
+        self.mask_image = None
 
         # Selection variables
-        self.selection_rect = None  # Reference to the selection rectangle
+        self.selection_rect = None
         self.start_x = 0
         self.start_y = 0
-        # Store selection in image coordinates (x, y, w, h) to preserve during zoom
         self.selection_image_coords = None
 
         # Zoom state
@@ -69,24 +71,22 @@ class AttackGUI:
         self.ZOOM_MAX = 8.0
 
         # Control variables
-        # --- FIX: Set a default value for the attack variable ---
         self.attack_var = tk.StringVar(value=list(attack_config.keys())[0])
-        # Single stepped slider: 0..100 mapped to 0.00..1.00
         self.step_strength_var = tk.IntVar(value=50)
         self.strength_label_var = tk.StringVar()
 
         # Detection state
-        self.detection_ctx = None  # dict with keys: base_name, image_number, original_path, watermarked_path, project_root, detection_function
+        self.detection_ctx = None
 
         # Attack history tracking for logging
-        self.attack_history = []  # List of dict: {attack_name, params, roi, mask_name}
+        self.attack_history = []
 
-        # Style for widgets
+        # Style for widgets (scaled)
         style = ttk.Style()
-        style.configure("TLabel", padding=5)
-        style.configure("TButton", padding=5)
-        style.configure("TFrame", padding=10)
-        style.configure("TLabelframe.Label", font="-weight bold")
+        style.configure("TLabel", padding=int(5 * self.scale))
+        style.configure("TButton", padding=int(5 * self.scale))
+        style.configure("TFrame", padding=int(10 * self.scale))
+        style.configure("TLabelframe.Label", font=f"-weight bold")
 
         # --- Main Layout ---
         self.main_frame = ttk.Frame(self.root)
@@ -97,16 +97,13 @@ class AttackGUI:
 
         # Vertical separator
         ttk.Separator(self.main_frame, orient=tk.VERTICAL).pack(
-            side=tk.LEFT, fill=tk.Y, padx=5
+            side=tk.LEFT, fill=tk.Y, padx=int(5 * self.scale)
         )
 
         # Image Canvas (right)
         self._create_image_canvas()
 
-        # --- FIX: Update the strength label on startup ---
         self.update_strength_label()
-
-        # Mask selection callback
         self.mask_var.trace_add("write", lambda *args: self._on_mask_selected())
 
     def _load_predefined_masks(self):
@@ -131,11 +128,18 @@ class AttackGUI:
         if mask_name in self.mask_functions:
             try:
                 import importlib
-
                 util = importlib.import_module("utilities")
-                func = getattr(util, self.mask_functions[mask_name])
-                mask = func(self.cv_image_modified)
-                # Convert boolean mask to uint8
+                if mask_name == "Attack Mask":
+                    mask = attack_mask(self.cv_image_modified)
+                elif mask_name == "Frequency Mask":
+                    func = getattr(util, self.mask_functions[mask_name])
+                    mask = func(self.cv_image_modified)
+                elif mask_name == "Saliency Mask":
+                    func = getattr(util, self.mask_functions[mask_name])
+                    mask = func(self.cv_image_modified)
+                else:
+                    func = getattr(util, self.mask_functions[mask_name])
+                    mask = func(self.cv_image_modified)
                 mask = mask.astype(np.uint8)
                 self.mask_image = mask
             except Exception as e:
@@ -152,11 +156,9 @@ class AttackGUI:
         if mask is None:
             self.mask_image = None
             return
-        # Resize mask to match image size if needed
         img_h, img_w = self.cv_image_modified.shape[:2]
         if mask.shape != (img_h, img_w):
             mask = cv2.resize(mask, (img_w, img_h), interpolation=cv2.INTER_NEAREST)
-        # Binarize mask: 0 for background, 1 for mask
         mask = (mask > 127).astype(np.uint8)
         self.mask_image = mask
 
@@ -169,29 +171,29 @@ class AttackGUI:
 
     def _create_control_panel(self):
         """Create the side frame with all controls."""
-        control_frame = ttk.Frame(self.main_frame, width=300)
-        control_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
-        control_frame.pack_propagate(False)  # Prevent frame from shrinking
+        control_frame = ttk.Frame(self.main_frame, width=int(300 * self.scale))
+        control_frame.pack(side=tk.LEFT, fill=tk.Y, padx=int(10 * self.scale), pady=int(10 * self.scale))
+        control_frame.pack_propagate(False)
 
         # --- File Section ---
         file_labelframe = ttk.LabelFrame(control_frame, text="File")
-        file_labelframe.pack(fill=tk.X, pady=5)
+        file_labelframe.pack(fill=tk.X, pady=int(5 * self.scale))
         ttk.Button(file_labelframe, text="Load Image", command=self.load_image).pack(
-            fill=tk.X, expand=True, padx=10, pady=5
+            fill=tk.X, expand=True, padx=int(10 * self.scale), pady=int(5 * self.scale)
         )
         ttk.Button(file_labelframe, text="Save Image", command=self.save_image).pack(
-            fill=tk.X, expand=True, padx=10, pady=5
+            fill=tk.X, expand=True, padx=int(10 * self.scale), pady=int(5 * self.scale)
         )
         ttk.Button(file_labelframe, text="Reset Image", command=self.reset_image).pack(
-            fill=tk.X, expand=True, padx=10, pady=(5, 10)
+            fill=tk.X, expand=True, padx=int(10 * self.scale), pady=(int(5 * self.scale), int(10 * self.scale))
         )
 
         # --- View Section ---
         view_labelframe = ttk.LabelFrame(control_frame, text="View")
-        view_labelframe.pack(fill=tk.X, pady=5)
+        view_labelframe.pack(fill=tk.X, pady=int(5 * self.scale))
         ttk.Button(
             view_labelframe, text="Reset View (Fit)", command=self.fit_to_window
-        ).pack(fill=tk.X, padx=10, pady=5)
+        ).pack(fill=tk.X, padx=int(10 * self.scale), pady=int(5 * self.scale))
 
         help_text = (
             "Keys +/-: Zoom (under cursor)\n"
@@ -201,16 +203,16 @@ class AttackGUI:
             "Left-Click + Drag: Select"
         )
         ttk.Label(view_labelframe, text=help_text, justify=tk.LEFT).pack(
-            padx=10, pady=5
+            padx=int(10 * self.scale), pady=int(5 * self.scale)
         )
 
         # --- Attack Section ---
         attack_labelframe = ttk.LabelFrame(control_frame, text="Attack Parameters")
-        attack_labelframe.pack(fill=tk.X, pady=5)
+        attack_labelframe.pack(fill=tk.X, pady=int(5 * self.scale))
 
         # --- Mask Selection ---
         ttk.Label(attack_labelframe, text="Predefined Mask:").pack(
-            anchor=tk.W, padx=10, pady=(5, 0)
+            anchor=tk.W, padx=int(10 * self.scale), pady=(int(5 * self.scale), 0)
         )
         mask_menu = ttk.Combobox(
             attack_labelframe,
@@ -218,10 +220,10 @@ class AttackGUI:
             values=self.masks,
             state="readonly",
         )
-        mask_menu.pack(fill=tk.X, padx=10, pady=5)
+        mask_menu.pack(fill=tk.X, padx=int(10 * self.scale), pady=int(5 * self.scale))
 
         ttk.Label(attack_labelframe, text="Attack Type:").pack(
-            anchor=tk.W, padx=10, pady=(5, 0)
+            anchor=tk.W, padx=int(10 * self.scale), pady=(int(5 * self.scale), 0)
         )
         attack_menu = ttk.Combobox(
             attack_labelframe,
@@ -229,24 +231,22 @@ class AttackGUI:
             values=list(attack_config.keys()),
             state="readonly",
         )
-        attack_menu.pack(fill=tk.X, padx=10, pady=5)
+        attack_menu.pack(fill=tk.X, padx=int(10 * self.scale), pady=int(5 * self.scale))
         attack_menu.bind("<<ComboboxSelected>>", self.update_strength_label)
 
         ttk.Label(attack_labelframe, text="Strength (0.0 - 1.0):").pack(
-            anchor=tk.W, padx=10, pady=(5, 0)
+            anchor=tk.W, padx=int(10 * self.scale), pady=(int(5 * self.scale), 0)
         )
 
-        # --- FIX: Removed problematic font property, added foreground color ---
         strength_feedback_label = ttk.Label(
             attack_labelframe,
             textvariable=self.strength_label_var,
-            foreground="gray",  # Use a dimmer color
+            foreground="gray",
         )
-        strength_feedback_label.pack(anchor=tk.W, padx=10)
+        strength_feedback_label.pack(anchor=tk.W, padx=int(10 * self.scale))
 
-        # Stepped slider (0..100) -> 0.00..1.00
         slider_frame = ttk.Frame(attack_labelframe)
-        slider_frame.pack(fill=tk.X, padx=10, pady=(5, 10))
+        slider_frame.pack(fill=tk.X, padx=int(10 * self.scale), pady=(int(5 * self.scale), int(10 * self.scale)))
         tk.Scale(
             slider_frame,
             from_=0,
@@ -256,16 +256,16 @@ class AttackGUI:
             showvalue=True,
             variable=self.step_strength_var,
             command=lambda v: self.update_strength_label(),
+            length=int(200 * self.scale),
         ).pack(fill=tk.X)
 
         # --- Actions Section ---
         self.action_labelframe = ttk.LabelFrame(control_frame, text="Actions")
-        self.action_labelframe.pack(fill=tk.X, pady=5)
+        self.action_labelframe.pack(fill=tk.X, pady=int(5 * self.scale))
         ttk.Button(
             self.action_labelframe, text="Apply Attack", command=self.apply_attack
-        ).pack(fill=tk.X, padx=10, pady=10)
+        ).pack(fill=tk.X, padx=int(10 * self.scale), pady=int(10 * self.scale))
 
-        # Detection button (shown only when detection context is available)
         self.detect_button = ttk.Button(
             self.action_labelframe, text="Run Detection", command=self.run_detection
         )
@@ -1216,6 +1216,12 @@ class AttackGUI:
 
 # --- Application Entry Point ---
 if __name__ == "__main__":
+    import sys
+    import argparse
+    parser = argparse.ArgumentParser(description="Image Attack GUI")
+    parser.add_argument("--scale", type=float, default=1.0, help="UI scale factor (default 1.0)")
+    args, unknown = parser.parse_known_args()
+
     if not IMPORTS_OK:
         root = tk.Tk()
         root.withdraw()
@@ -1228,6 +1234,6 @@ if __name__ == "__main__":
         root.destroy()
     else:
         root = tk.Tk()
-        app = AttackGUI(root)
-        root.geometry("1100x700")
+        app = AttackGUI(root, scale=args.scale)
+        root.geometry(f"{int(1100 * args.scale)}x{int(700 * args.scale)}")
         root.mainloop()
