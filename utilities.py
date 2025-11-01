@@ -1,3 +1,4 @@
+
 from matplotlib import pyplot as plt
 import numpy as np
 import os
@@ -117,7 +118,7 @@ def frequency_mask(
     method: str = "dct",
     band: str = "mid",
     block_size: int = 8,
-    keep_ratio: float = 0.2,
+    keep_ratio: float = 0.1,
 ) -> np.ndarray:
     """
     Masks regions based on their frequency content in DCT or DWT domain.
@@ -182,11 +183,17 @@ def frequency_mask(
         for score, i, j in top_scores:
             mask[i : i + block_size, j : j + block_size] = True
 
+    # show_images(img,mask)
+
     return mask
 
 
 # --- Saliency Mask ---
-def saliency_mask(img: np.ndarray, percentile: int = 30) -> np.ndarray:
+# this attack is like a hidden gem, if we change the threshold to check for the top 20% we
+# can attack images that embed in intelligent area.
+# if instead we search for the low 20 (change the '>' to '<' for the end threshold, and also the,
+# percentile parameter) and we are checking for really simple watermarking techniques.  
+def saliency_mask(img: np.ndarray, percentile: int = 80) -> np.ndarray:
     """
     Masks regions with lowest visual saliency (likely watermark embedding zones).
     Uses OpenCV's saliency API. Requires 'opencv-contrib-python'.
@@ -223,16 +230,18 @@ def saliency_mask(img: np.ndarray, percentile: int = 30) -> np.ndarray:
 
     # Mask least salient regions
     thr = np.percentile(saliencyMap, percentile)
-    mask = saliencyMap < thr
+    mask = saliencyMap > thr
 
+    # show_images(img,mask)
     return mask
 
 def entropy_mask(
     img: np.ndarray,
-    block_size: int = 16,
+    block_size: int = 8,
     entropy_exp: float = 3.0,
     energy_thr: float = 50.0,
-    keep_ratio: float = 0.05,
+    keep_ratio: float = 0.007,
+    n_candidates: int = 16,
 ) -> np.ndarray:
     """
     Masks blocks with highest SVD flatness score (similar to embedding block selection).
@@ -279,6 +288,13 @@ def entropy_mask(
         top_scores = heapq.nlargest(n_keep, scores)
         for score, i, j in top_scores:
             mask[i : i + block_size, j : j + block_size] = True
+
+    # TODO: uncomment, and comment before to => Always select at least n_blocks, optionally up to n_candidates for analysis
+    # n_blocks = 16
+    # top_scores = heapq.nlargest(max(n_blocks, n_candidates), scores)
+    # for idx, (score, i, j) in enumerate(top_scores):
+    #     if idx < n_blocks:
+    #         mask[i : i + block_size, j : j + block_size] = True
 
     return mask
 

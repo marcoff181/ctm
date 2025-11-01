@@ -117,17 +117,18 @@ def log_attack(detected, path, wpsnr, attack_name, params, mask):
             log.write(f'{detected},{image},{group},{wpsnr_str},"{attack_name}({params})"\n')
 
 
-def attack_mask(img: np.ndarray, percentile: int = 10) -> np.ndarray:
+def attack_mask(img: np.ndarray, percentile: int = 5) -> np.ndarray:
     """Masks blocks with least probability of being attacked."""
     attack_func = list(attack_config.values()) # This now gets a list of 'def' functions
-    strength = 0.5  # Use a static alpha to get consistent result
+    strengths = np.linspace(0.0, 1.5, 3)  # Use a static alpha to get consistent result
 
     # Collect absolute difference for each attack
     diffs = []
     for func in attack_func:
-        attacked = func(img, strength)
-        diff = np.abs(attacked.astype(np.float32) - img.astype(np.float32))
-        diffs.append(diff)
+        for s in strengths:
+            attacked = func(img, s)
+            diff = np.abs(attacked.astype(np.float32) - img.astype(np.float32))
+            diffs.append(diff)
     
     # Average difference across all attacks
     avg_diff = np.mean(diffs, axis=0)
@@ -135,6 +136,8 @@ def attack_mask(img: np.ndarray, percentile: int = 10) -> np.ndarray:
     # Find zones with lowest change (least affected)
     threshold = np.percentile(avg_diff, percentile)
     mask = avg_diff <= threshold
+
+    show_images(img,mask)
     
     return mask
 
@@ -357,12 +360,12 @@ def full_attack(detection_function_paths: Dict[str, str]):
         print("[INFO] Generating masks...")
         masks_to_try = {
             "no_mask": np.ones_like(original_img, dtype=bool),
-            "edges_mask": edges_mask(original_img),
+            # "edges_mask": edges_mask(original_img),
             # "noisy_mask": noisy_mask(original_img),
             "entropy_mask": entropy_mask(original_img),
             # "attack_mask": attack_mask(original_img.copy()),
             # "frequency_mask": frequency_mask(original_img),
-            # "saliency_mask": saliency_mask(original_img)
+            "saliency_mask": saliency_mask(original_img)
         }
 
         jobs = []
