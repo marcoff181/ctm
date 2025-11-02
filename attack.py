@@ -8,6 +8,7 @@ import pandas as pd
 import tempfile
 import concurrent.futures
 from typing import Dict, Callable, Any, List, Tuple, Optional
+import matplotlib.pyplot as plt
 
 # --- Attack Function Imports ---
 # (Assuming these are in a file named attack_functions.py)
@@ -51,7 +52,7 @@ def param_resize(x: float) -> float:
     return max(1,np.round((1 - x) * 512)) / 512
     
 def param_median(x: float) -> list:
-    return [[1,3], [3,1], [3,3], [3,5], [5,3], [5,5], [5,7], [7,5], [7,7]][(int(floor(x * 8.999)))]
+    return [[1,3], [3,1], [3,3], [3,5], [5,3], [5,5], [5,7], [7,5], [7,7]][(int(np.floor(x * 8.999)))]
     
 def param_sharp(x: float) -> float:
     return (x+0.1) * 0.2
@@ -117,14 +118,16 @@ def log_attack(detected, path, wpsnr, attack_name, params, mask):
             log.write(f'{detected},{image},{group},{wpsnr_str},"{attack_name}({params})"\n')
 
 
-def attack_mask(img: np.ndarray, percentile: int = 5) -> np.ndarray:
+def attack_mask(img: np.ndarray, percentile: int = 20) -> np.ndarray:
     """Masks blocks with least probability of being attacked."""
-    attack_func = list(attack_config.values()) # This now gets a list of 'def' functions
-    strengths = np.linspace(0.0, 1.5, 3)  # Use a static alpha to get consistent result
+    strengths = np.linspace(0.0, 1.0, 20)  # Use a static alpha to get consistent result
 
     # Collect absolute difference for each attack
     diffs = []
-    for func in attack_func:
+    for name, func in attack_config.items():
+        # awgn is random so it just skews the results
+        if name == "AWGN":
+            continue
         for s in strengths:
             attacked = func(img, s)
             diff = np.abs(attacked.astype(np.float32) - img.astype(np.float32))
@@ -136,8 +139,9 @@ def attack_mask(img: np.ndarray, percentile: int = 5) -> np.ndarray:
     # Find zones with lowest change (least affected)
     threshold = np.percentile(avg_diff, percentile)
     mask = avg_diff <= threshold
+    # mask = avg_diff
 
-    show_images(img,mask)
+    # show_images(img,mask)
     
     return mask
 
@@ -360,13 +364,24 @@ def full_attack(detection_function_paths: Dict[str, str]):
         print("[INFO] Generating masks...")
         masks_to_try = {
             "no_mask": np.ones_like(original_img, dtype=bool),
-            # "edges_mask": edges_mask(original_img),
-            # "noisy_mask": noisy_mask(original_img),
+            "edges_mask": edges_mask(original_img),
+            "noisy_mask": noisy_mask(original_img),
             "entropy_mask": entropy_mask(original_img),
-            # "attack_mask": attack_mask(original_img.copy()),
-            # "frequency_mask": frequency_mask(original_img),
+            "attack_mask": attack_mask(original_img.copy()),
+            "frequency_mask": frequency_mask(original_img),
             "saliency_mask": saliency_mask(original_img)
         }
+
+        # show attack masks
+
+        # plt.figure(figsize=(10, 6))
+        # for i, (name, mask) in enumerate(masks_to_try.items(), 1):
+        #     plt.subplot(2, 3, i)
+        #     plt.imshow(mask if mask.ndim == 2 else mask[..., 0], cmap='gray')
+        #     plt.title(name)
+        #     plt.axis('off')
+        # plt.tight_layout()
+        # plt.show()
 
         jobs = []
         for mask_name, mask_data in masks_to_try.items():
