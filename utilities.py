@@ -110,8 +110,6 @@ def noisy_mask(
     return mask
 
 
-# TODO: note the percenile paramter can be tweaked, currently 3%-5% covers more than enough
-
 # --- Frequency Domain Mask for DWT/DCT attacks ---
 def frequency_mask(
     img: np.ndarray,
