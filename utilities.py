@@ -1,4 +1,3 @@
-
 from matplotlib import pyplot as plt
 import numpy as np
 import os
@@ -190,7 +189,7 @@ def frequency_mask(
 # this attack is like a hidden gem, if we change the threshold to check for the top 20% we
 # can attack images that embed in intelligent area.
 # if instead we search for the low 20 (change the '>' to '<' for the end threshold, and also the,
-# percentile parameter) and we are checking for really simple watermarking techniques.  
+# percentile parameter) and we are checking for really simple watermarking techniques.
 def saliency_mask(img: np.ndarray, percentile: int = 80) -> np.ndarray:
     """
     Masks regions with lowest visual saliency (likely watermark embedding zones).
@@ -248,7 +247,7 @@ def entropy_mask(
         img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     else:
         img_gray = img
-        
+
     img_float = img_gray.astype(np.float32)
     h, w = img_float.shape
     mask = np.zeros_like(img_float, dtype=bool)
@@ -259,20 +258,20 @@ def entropy_mask(
             block = img_float[i : i + block_size, j : j + block_size]
             if block.shape[0] < block_size or block.shape[1] < block_size:
                 continue
-                
+
             U, S, V = np.linalg.svd(block, full_matrices=False)
-            
+
             # Prevent division by zero if sum is 0
             S_sum = S.sum()
             if S_sum < 1e-8:
                 S_norm = S # All are zero
             else:
                 S_norm = S / S_sum
-            
+
             # Prevent log(0)
             S_log = np.log2(S_norm + 1e-9) 
             entropy = -np.sum(S_norm * S_log) / np.log2(len(S))
-            
+
             energy = np.var(block)
             score = (entropy**entropy_exp) * np.exp(-energy / energy_thr)
             scores.append((score, i, j)) # Score first for heapq
@@ -281,7 +280,7 @@ def entropy_mask(
     n_keep = int(len(scores) * keep_ratio)
     if n_keep == 0 and len(scores) > 0: # Ensure at least one block is selected
         n_keep = 1
-        
+
     if n_keep > 0:
         top_scores = heapq.nlargest(n_keep, scores)
         for score, i, j in top_scores:
@@ -294,6 +293,22 @@ def entropy_mask(
     #     if idx < n_blocks:
     #         mask[i : i + block_size, j : j + block_size] = True
 
+    return mask
+
+
+# In utilities.py, aggiungi:
+def border_mask(img: np.ndarray, border_percent: float = 0.1) -> np.ndarray:
+    """Maschera che attacca solo i bordi (simula crop)"""
+    h, w = img.shape[:2]
+    mask = np.zeros((h, w), dtype=bool)
+    border_h = int(h * border_percent)
+    border_w = int(w * border_percent)
+
+    # Attacca solo bordi
+    mask[:border_h, :] = True  # Top
+    mask[-border_h:, :] = True  # Bottom
+    mask[:, :border_w] = True  # Left
+    mask[:, -border_w:] = True  # Right
     return mask
 
 

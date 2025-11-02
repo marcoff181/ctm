@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 
 # --- Attack Function Imports ---
 from attack_functions import awgn, blur, sharpening, median, resizing, jpeg_compression
-from utilities import edges_mask, frequency_mask, noisy_mask, entropy_mask, saliency_mask, show_images
+from utilities import edges_mask, frequency_mask, noisy_mask, entropy_mask, saliency_mask, border_mask, show_images
 
 # --- Configuration ---
 MIN_WPSNR = 35.0
@@ -367,7 +367,8 @@ def full_attack(detection_function_paths: Dict[str, str]):
             "entropy_mask": entropy_mask(original_img),
             "attack_mask": attack_mask(original_img.copy()),
             "frequency_mask": frequency_mask(original_img),
-            "saliency_mask": saliency_mask(original_img)
+            "saliency_mask": saliency_mask(original_img),
+            "border_mask": border_mask(original_img),
         }
 
         # show attack masks
