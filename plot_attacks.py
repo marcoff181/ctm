@@ -16,7 +16,7 @@ attacked_wpsnr_lower_bound = 35
 
 
 def study_attack_parameter_ranges(
-    images_dir="./images/", num_images=1, alpha_steps=200
+    images_dir="./images/", num_images=1, alpha_steps=50
 ):
     print("--- Starting Attack Parameter Range Study ---")
 
@@ -51,7 +51,7 @@ def study_attack_parameter_ranges(
     print(f"Successfully loaded {len(images)} images for the study.")
 
     # we of course start from 1/512 to help our brother resize
-    alpha_values = np.linspace(0.001953125, 1.0, alpha_steps)
+    alpha_values = np.linspace(0.0, 1.0, alpha_steps)
     results = {}
 
     for attack_name, attack_func in attack_config.items():

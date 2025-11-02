@@ -18,7 +18,7 @@ from utilities import edges_mask, frequency_mask, noisy_mask, entropy_mask, sali
 # --- Configuration ---
 MIN_WPSNR = 35.0
 BIN_SEARCH_ITERATIONS = 6
-MAX_WORKERS = os.cpu_count() // 2  # Use half of available CPU cores
+MAX_WORKERS = os.cpu_count() # // 2  # Use half of available CPU cores
 
 # --- Paths ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -42,19 +42,19 @@ def param_jpeg(x: float) -> int:
     return int(round((1 - x) * 100))
 
 def param_blur(x: float) -> float:
-    return (x + 0.15) * 1.2
+    return (x + 0.15) * 3 
     
 def param_awgn(x: float) -> float:
-    return x * 30
+    return (x+ 0.01) * 40
     
 def param_resize(x: float) -> float:
-    return np.round(((1 - x) + 0.4) * 512) / 512
+    return max(1,np.round((1 - x) * 512)) / 512
     
 def param_median(x: float) -> list:
-    return [[1, 3], [3, 1], [3, 3], [3, 5], [5, 3]][(int(round(x * 4))) % 5]
+    return [[1,3], [3,1], [3,3], [3,5], [5,3], [5,5], [5,7], [7,5], [7,7]][(int(floor(x * 8.999)))]
     
 def param_sharp(x: float) -> float:
-    return (x * 0.07) + 0.035
+    return (x+0.1) * 0.2
 
 # This dictionary is now pickleable (string -> function reference)
 param_converters = {
