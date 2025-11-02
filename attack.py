@@ -11,9 +11,7 @@ from typing import Dict, Callable, Any, List, Tuple, Optional
 import matplotlib.pyplot as plt
 
 # --- Attack Function Imports ---
-# (Assuming these are in a file named attack_functions.py)
 from attack_functions import awgn, blur, sharpening, median, resizing, jpeg_compression
-# (Assuming these are in a file named utilities.py)
 from utilities import edges_mask, frequency_mask, noisy_mask, entropy_mask, saliency_mask, show_images
 
 # --- Configuration ---
