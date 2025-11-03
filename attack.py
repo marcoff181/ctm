@@ -26,6 +26,7 @@ ATTACKED_IMAGES_PATH = os.path.join(BASE_DIR, "attacked_groups_images")
 ORIGINAL_IMAGES_PATH = os.path.join(BASE_DIR, "challenge_images")
 TMP_ATTACK_DIR = os.path.join(BASE_DIR, "tmp_attacks")
 CSV_ATTACKS_LOG_PATH = os.path.join(BASE_DIR, "attacks_log.csv")
+CSV_BEST_ATTACKS_LOG_PATH = os.path.join(BASE_DIR, "best_attacks_log.csv")
 
 
 # ==============================================================================
@@ -302,6 +303,7 @@ def full_attack(detection_function_paths: Dict[str, str]):
         return
 
     all_log_entries = []
+    best_for_each = []
     if os.path.exists(CSV_ATTACKS_LOG_PATH):
         try:
             df_existing = pd.read_csv(CSV_ATTACKS_LOG_PATH)
@@ -312,6 +314,7 @@ def full_attack(detection_function_paths: Dict[str, str]):
 
     img_list = sorted(os.listdir(WATERMARKED_IMAGES_PATH))
     print(f"[INFO] Found {len(img_list)} images to attack.")
+
 
     for filename in img_list:
         watermarked_path = os.path.join(WATERMARKED_IMAGES_PATH, filename)
@@ -418,11 +421,19 @@ def full_attack(detection_function_paths: Dict[str, str]):
 
         if image_best_results:
             overall_best = max(image_best_results, key=lambda r: r["wpsnr"])
-            
+
             wpsnr = overall_best["wpsnr"]
             atk_name = overall_best["attack_name"]
             mask_name = overall_best["mask_name"]
             img_data = overall_best["attacked_img"]
+
+            best_entry = np.array([
+                image_name,
+                group_name,
+                f"{wpsnr}",
+                f"{atk_name}({overall_best['params']}),{mask_name}"
+            ])
+            best_for_each.append(best_entry)
             
             final_filename = f"crispymcmark_{group_name}_{image_name}.bmp"
             final_path = os.path.join(ATTACKED_IMAGES_PATH, final_filename)
@@ -442,6 +453,13 @@ def full_attack(detection_function_paths: Dict[str, str]):
         df_logs = pd.DataFrame(all_log_entries)
         df_logs = df_logs.drop_duplicates(subset=["Image", "Group", "Attack(s) with parameters"], keep='last')
         df_logs.to_csv(CSV_ATTACKS_LOG_PATH, index=False)
+
+    if best_for_each:
+        print(f"[INFO] Writing only best attacks to {CSV_BEST_ATTACKS_LOG_PATH}...")
+        np.savetxt(CSV_BEST_ATTACKS_LOG_PATH, best_for_each, fmt='%s', delimiter=',')
+        # df_logs = df_logs.drop_duplicates(subset=["Image", "Group", "Attack(s) with parameters"], keep='last')
+        # df_logs.to_csv(CSV_BEST_ATTACKS_LOG_PATH, index=False)
+
     
     print("[INFO] Attack suite finished.")
 
