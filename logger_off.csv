@@ -11,7 +11,7 @@ ecorp;;36.23709636439473;39.915296373372406;;JPEG(6)+inverse of noisy_mask;Sharp
 ghostmark;37.77180300185606;41.654836834168364;42.105110689657735;Median([5, 3])+no_mask;JPEG(14)+no_mask;Sharp(0.07625)+inverse of edges_mask
 smokeonthewatermark;;;;;;
 crispymcmark;;;;;;
-acme;;;35.750180722791676;;;Sharp(0.1575)+(1-edges_mask)
+acme;;;36.0593330867773;;;Sharp(0.1575)+(1-edges_mask(low_threshold=40, high_threshold=270))
 shadowmark;;;;;;
 wadeinthewater;39.774205818635494;63.42950865324819;49.31284173487795;AWGN(18.525)+edges_mask;AWGN(1.0250000000000001)+edges_mask;JPEG(25)+edges_mask
 theunknown;;;;;;
