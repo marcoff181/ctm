@@ -7,7 +7,7 @@ tree.bmp;;;;;;
 ATTACK;;;;;;
 group_name;wpsnr_tree;wpsnr_building;wpsnr_rollercoaster;Attack used for tree.bmp;Attack used for building.bmp;Attack used for rollercoaster.bmp
 pixeldef;;;;;;
-ecorp;;36.23709636439473;39.915296373372406;;JPEG(6)+inverse of noisy_mask;Sharp(0.06999999999999999)+ inverse of saliency_mask
+ecorp;38.48144399814749;41.427297055689564;43.24460538022815;Sharp(0.40671875)+attack_mask(percentile 40);Sharp(0.2553515625)+attack_mask(perc 40);Sharp(0.18503906250000002)+attack_mask(perc 40)
 ghostmark;37.77180300185606;41.654836834168364;42.105110689657735;Median([5, 3])+no_mask;JPEG(14)+no_mask;Sharp(0.07625)+inverse of edges_mask
 smokeonthewatermark;;;;;;
 crispymcmark;;;;;;
@@ -43,9 +43,10 @@ tree,wadeinthewater,39.774205818635494,AWGN(18.525),edges_mask
 # tree,theunknown,44.36222040139468,Sharp(0.07625),noisy_mask
 
 # pippo's attacks
-# buildings,ecorp,36.23709636439473,JPEG(6),noisy_mask (inverse)
-# rollercoaster,ecorp,39.915296373372406,Sharp(0.06999999999999999)+ inverse of saliency_mask
-# ECORP FINDS WATERMARK IN DESTROYED IMAGES (wpsnr of 22)
+# these attacks use percentile 40 for attack mask 
+tree,ecorp,38.48144399814749,Sharp(0.40671875),attack_mask
+buildings,ecorp,41.427297055689564,Sharp(0.2553515625),attack_mask
+rollercoaster,ecorp,43.24460538022815,Sharp(0.18503906250000002),attack_mask
 
 # buildings,bandsofbits,64.67461155951231,JPEG(88),edges_mask
 # rollercoaster,bandsofbits,63.757960731647785,JPEG(86),edges_mask
