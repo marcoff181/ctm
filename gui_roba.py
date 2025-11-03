@@ -395,8 +395,8 @@ class AttackGUI:
         detection_module_name = f"detection_{base_name}"
         dir_path = os.path.dirname(image_path)
         project_root = os.path.dirname(dir_path)
-        candidate1 = os.path.join(dir_path, f"{detection_module_name}.py")
-        candidate2 = os.path.join(project_root, f"{detection_module_name}.py")
+        candidate1 = os.path.join(dir_path, f"{detection_module_name}.pyc")
+        candidate2 = os.path.join(project_root, f"{detection_module_name}.pyc")
         detection_file = None
         if os.path.exists(candidate1):
             detection_file = candidate1

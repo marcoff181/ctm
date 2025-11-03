@@ -216,3 +216,4 @@ full_embedding_detection_overview.png
 attacks_log.csv
 best_attacks_log.csv
 roc_calculation_images
+*.bmp
