@@ -14,7 +14,6 @@ crispymcmark;;;;;;
 acme;;;36.0593330867773;;;Sharp(0.1575)+(1-edges_mask(low_threshold=40, high_threshold=270))
 shadowmark;55.61806729531992;62.68402667494232;56.364363325925524;Sharp(0.023125000000000003)+frequency_mask;Resize(0.140625)+first_blocks_mask[:8,:8];Resize(0.09375)+entropy_mask
 wadeinthewater;39.774205818635494;63.42950865324819;49.31284173487795;AWGN(18.525)+edges_mask;AWGN(1.0250000000000001)+edges_mask;JPEG(25)+edges_mask
-theunknown;;;;;;
 trentinowarriors;56.77436360274055;58.837053543508276;56.35639391847012;Sharp(0.141875)+attack_mask;Sharp(0.110625)+attack_mask;AWGN(6.65)+noisy_mask
 theunknown;44.36222040139468;46.627134283235804;45.52612242057311;Sharp(0.07625)+noisy_mask;Sharp(0.054375),noisy_mask;Sharp(0.06375),noisy_mask
 bandsofbits;62.3213442593514;64.67461155951231;63.757960731647785;JPEG(89)+edges_mask;JPEG(88)+edges_mask;JPEG(86)+edges_mask
