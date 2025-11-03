@@ -6,14 +6,18 @@ tree.bmp;;;;;;
 ;;;;;;
 ATTACK;;;;;;
 group_name;wpsnr_tree;wpsnr_building;wpsnr_rollercoaster;Attack used for tree.bmp;Attack used for building.bmp;Attack used for rollercoaster.bmp
-pixeldef;;;;;;
+pixeldef;43.574476359180814;45.32518567147722;43.862320998305584;Resize(0.75),edges_mask;Median([3, 3]) + no_mask;JPEG(17) + no_mask
 ecorp;;36.23709636439473;39.915296373372406;;JPEG(6)+inverse of noisy_mask;Sharp(0.06999999999999999)+ inverse of saliency_mask
 ghostmark;37.77180300185606;41.654836834168364;42.105110689657735;Median([5, 3])+no_mask;JPEG(14)+no_mask;Sharp(0.07625)+inverse of edges_mask
 smokeonthewatermark;;;;;;
 crispymcmark;;;;;;
-acme;;;36.0593330867773;;;Sharp(0.1575)+(1-edges_mask(low_threshold=40, high_threshold=270))
 shadowmark;55.61806729531992;62.68402667494232;56.364363325925524;Sharp(0.023125000000000003)+frequency_mask;Resize(0.140625)+first_blocks_mask[:8,:8];Resize(0.09375)+entropy_mask
 wadeinthewater;39.774205818635494;63.42950865324819;49.31284173487795;AWGN(18.525)+edges_mask;AWGN(1.0250000000000001)+edges_mask;JPEG(25)+edges_mask
 trentinowarriors;56.77436360274055;58.837053543508276;56.35639391847012;Sharp(0.141875)+attack_mask;Sharp(0.110625)+attack_mask;AWGN(6.65)+noisy_mask
+acme;38.63111754646936;40.08673450061163;39.073294121232195;Resize(0.53125) + (inverse of entropy_mask);Median([3, 5]) + inverse of entropy_mask;JPEG(9) + inverse of entropy_mask
 theunknown;44.36222040139468;46.627134283235804;45.52612242057311;Sharp(0.07625)+noisy_mask;Sharp(0.054375),noisy_mask;Sharp(0.06375),noisy_mask
 bandsofbits;62.3213442593514;64.67461155951231;63.757960731647785;JPEG(89)+edges_mask;JPEG(88)+edges_mask;JPEG(86)+edges_mask
+
+# buildings,pixeldef,45.32518567147722,Median([3, 3]),no_mask
+# rollercoaster,pixeldef,43.862320998305584,JPEG(17),no_mask
+# tree,pixeldef,43.574476359180814,Resize(0.75),edges_mask
