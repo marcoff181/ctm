@@ -3,7 +3,7 @@ from cv2 import imread
 import numpy as np
 
 # embedded parameters
-ALPHA = 10.0
+ALPHA = 9.0
 N_BLOCKS = 16
 BLOCK_SIZE = 8
 
@@ -31,7 +31,7 @@ def svd_flat_score(block):
     energy = np.var(LL)
 
     # compromise between the two, use entropy exponent to tweak the final score
-    return float((entropy**3) * np.exp(-energy / 50))
+    return float((entropy**110) * np.exp(-energy / 15))
 
 
 def select_best_blocks(original_image):
