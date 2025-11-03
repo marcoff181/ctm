@@ -13,15 +13,24 @@ smokeonthewatermark;;;;;;
 crispymcmark;;;;;;
 acme;;;;;;
 shadowmark;;;;;;
-wadeinthewater;;;;;;
+wadeinthewater;39.774205818635494;63.42950865324819;49.31284173487795;AWGN(18.525)+edges_mask;AWGN(1.0250000000000001)+edges_mask;JPEG(25)+edges_mask
 theunknown;;;;;;
-trentinowarriors;;;;;;
+trentinowarriors;56.77436360274055;58.837053543508276;55.620054511508776;Sharp(0.141875)+attack_mask;Sharp(0.110625)+attack_mask;JPEG(86)+edges_mask
 bandsofbits;62.3213442593514;64.67461155951231;63.757960731647785;JPEG(89)+edges_mask;JPEG(88)+edges_mask;JPEG(86)+edges_mask
 
 
 # buildings,bandsofbits,64.67461155951231,JPEG(88),edges_mask
 # rollercoaster,bandsofbits,63.757960731647785,JPEG(86),edges_mask
 # tree,bandsofbits,62.3213442593514,JPEG(89),edges_mask
+
+# rollercoaster,trentinowarriors,55.620054511508776,Sharp(0.023125000000000003),frequency_mask
+# buildings,trentinowarriors,58.837053543508276,Sharp(0.110625),attack_mask
+# tree,trentinowarriors,56.77436360274055,Sharp(0.141875),attack_mask
+
+rollercoaster,wadeinthewater,49.31284173487795,JPEG(25),edges_mask
+buildings,wadeinthewater,63.42950865324819,AWGN(1.0250000000000001),edges_mask
+tree,wadeinthewater,39.774205818635494,AWGN(18.525),edges_mask
+
 
 
 # tree,ghostmark,37.77180300185606,Median([5, 3]),no_mask
