@@ -7,7 +7,7 @@ tree.bmp;ALPHA=9,N_BLOCKS=13,float((entropy**110) * np.exp(-energy / 15));63.02;
 ATTACK;;;;;;
 group_name;wpsnr_tree;wpsnr_building;wpsnr_rollercoaster;Attack used for tree.bmp;Attack used for building.bmp;Attack used for rollercoaster.bmp
 pixeldef;43.574476359180814;45.32518567147722;43.862320998305584;Resize(0.75),edges_mask;Median([3, 3]) + no_mask;JPEG(17) + no_mask
-ecorp;38.48144399814749;41.427297055689564;43.24460538022815;Sharp(0.40671875)+attack_mask(percentile 40);Sharp(0.2553515625)+attack_mask(perc 40);Sharp(0.18503906250000002)+attack_mask(perc 40)
+ecorp;38.48144399814749;41.427297055689564;43.24460538022815;Sharp(0.40671875)+attack_mask(percentile 40);Sharp(0.2553515625)+attack_mask(percentile 40);Sharp(0.18503906250000002)+attack_mask(percentile 40)
 ghostmark;37.77180300185606;41.654836834168364;42.105110689657735;Median([5, 3])+no_mask;JPEG(14)+no_mask;Sharp(0.07625)+inverse of edges_mask
 smokeonthewatermark;44.19891471913813;45.503831592721966;43.82626921531784;Sharp(0.36375)+attack_mask(percentile 30);Sharp(0.23875000000000002)+attack_mask(percentile 30);Sharp(0.379375)+attack_mask(percentile 30)
 crispymcmark;;;;;;
