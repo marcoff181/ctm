@@ -8,7 +8,7 @@ ATTACK;;;;;;
 group_name;wpsnr_tree;wpsnr_building;wpsnr_rollercoaster;Attack used for tree.bmp;Attack used for building.bmp;Attack used for rollercoaster.bmp
 pixeldef;;;;;;
 ecorp;;;;;;
-ghostmark;;;;;;
+ghostmark;37.77180300185606;41.654836834168364;42.105110689657735;Median([5, 3])+no_mask;JPEG(14)+no_mask;Sharp(0.07625)+inverse of edges_mask
 smokeonthewatermark;;;;;;
 crispymcmark;;;;;;
 acme;;;;;;
@@ -22,3 +22,8 @@ bandsofbits;62.3213442593514;64.67461155951231;63.757960731647785;JPEG(89)+edges
 # buildings,bandsofbits,64.67461155951231,JPEG(88),edges_mask
 # rollercoaster,bandsofbits,63.757960731647785,JPEG(86),edges_mask
 # tree,bandsofbits,62.3213442593514,JPEG(89),edges_mask
+
+
+# tree,ghostmark,37.77180300185606,Median([5, 3]),no_mask
+# buildings,ghostmark,41.654836834168364,JPEG(14),no_mask
+# rollercoaster,ghostmark,42.105110689657735,Sharp(0.07625),inverse of edges_mask
