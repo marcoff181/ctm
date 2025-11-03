@@ -296,6 +296,14 @@ def entropy_mask(
     return mask
 
 
+def first_blocks_mask(
+    img: np.ndarray
+) -> np.ndarray:
+    m = np.zeros_like(img, dtype=bool)
+    m[:8, :8] = True
+    return m
+
+
 # In utilities.py, aggiungi:
 def border_mask(img: np.ndarray, border_percent: float = 0.1) -> np.ndarray:
     """Maschera che attacca solo i bordi (simula crop)"""
