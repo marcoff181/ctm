@@ -7,7 +7,7 @@ tree.bmp;;;;;;
 ATTACK;;;;;;
 group_name;wpsnr_tree;wpsnr_building;wpsnr_rollercoaster;Attack used for tree.bmp;Attack used for building.bmp;Attack used for rollercoaster.bmp
 pixeldef;;;;;;
-ecorp;;36.23709636439473;;;JPEG(6)+inverse of noisy_mask;
+ecorp;;36.23709636439473;39.915296373372406;;JPEG(6)+inverse of noisy_mask;Sharp(0.06999999999999999)+ inverse of saliency_mask
 ghostmark;37.77180300185606;41.654836834168364;42.105110689657735;Median([5, 3])+no_mask;JPEG(14)+no_mask;Sharp(0.07625)+inverse of edges_mask
 smokeonthewatermark;;;;;;
 crispymcmark;;;;;;
@@ -19,9 +19,6 @@ trentinowarriors;56.77436360274055;58.837053543508276;55.620054511508776;Sharp(0
 bandsofbits;62.3213442593514;64.67461155951231;63.757960731647785;JPEG(89)+edges_mask;JPEG(88)+edges_mask;JPEG(86)+edges_mask
 
 
-# buildings,bandsofbits,64.67461155951231,JPEG(88),edges_mask
-# rollercoaster,bandsofbits,63.757960731647785,JPEG(86),edges_mask
-# tree,bandsofbits,62.3213442593514,JPEG(89),edges_mask
 
 # rollercoaster,trentinowarriors,55.620054511508776,Sharp(0.023125000000000003),frequency_mask
 # buildings,trentinowarriors,58.837053543508276,Sharp(0.110625),attack_mask
@@ -33,9 +30,6 @@ tree,wadeinthewater,39.774205818635494,AWGN(18.525),edges_mask
 
 
 
-# tree,ghostmark,37.77180300185606,Median([5, 3]),no_mask
-# buildings,ghostmark,41.654836834168364,JPEG(14),no_mask
-# rollercoaster,ghostmark,42.105110689657735,Sharp(0.07625),inverse of edges_mask
 
 # buildings,pixeldef,45.32518567147722,Median([3, 3]),no_mask
 # rollercoaster,pixeldef,43.862320998305584,JPEG(17),no_mask
@@ -44,5 +38,15 @@ tree,wadeinthewater,39.774205818635494,AWGN(18.525),edges_mask
 # rollercoaster,theunknown,45.52612242057311,Sharp(0.06375),noisy_mask
 # tree,theunknown,44.36222040139468,Sharp(0.07625),noisy_mask
 
+# pippo's attacks
 # buildings,ecorp,36.23709636439473,JPEG(6),noisy_mask (inverse)
+# rollercoaster,ecorp,39.915296373372406,Sharp(0.06999999999999999)+ inverse of saliency_mask
 # ECORP FINDS WATERMARK IN DESTROYED IMAGES (wpsnr of 22)
+
+# buildings,bandsofbits,64.67461155951231,JPEG(88),edges_mask
+# rollercoaster,bandsofbits,63.757960731647785,JPEG(86),edges_mask
+# tree,bandsofbits,62.3213442593514,JPEG(89),edges_mask
+
+# tree,ghostmark,37.77180300185606,Median([5, 3]),no_mask
+# buildings,ghostmark,41.654836834168364,JPEG(14),no_mask
+# rollercoaster,ghostmark,42.105110689657735,Sharp(0.07625),inverse of edges_mask
