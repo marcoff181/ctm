@@ -6,28 +6,19 @@ tree.bmp;;;;;;
 ;;;;;;
 ATTACK;;;;;;
 group_name;wpsnr_tree;wpsnr_building;wpsnr_rollercoaster;Attack used for tree.bmp;Attack used for building.bmp;Attack used for rollercoaster.bmp
-<<<<<<< HEAD
 pixeldef;;;;;;
 ecorp;;36.23709636439473;;;JPEG(6)+inverse of noisy_mask;
 ghostmark;37.77180300185606;41.654836834168364;42.105110689657735;Median([5, 3])+no_mask;JPEG(14)+no_mask;Sharp(0.07625)+inverse of edges_mask
-=======
-pixeldef;43.574476359180814;45.32518567147722;43.862320998305584;Resize(0.75)+edges_mask;Median([3, 3])+no_mask;JPEG(17)+no_mask
-ecorp;;;;;;
-ghostmark;;;;;;
->>>>>>> d3e8248 (logger updates)
 smokeonthewatermark;;;;;;
 crispymcmark;;;;;;
 acme;;;35.750180722791676;;;Sharp(0.1575)+(1-edges_mask)
 shadowmark;;;;;;
-<<<<<<< HEAD
 wadeinthewater;39.774205818635494;63.42950865324819;49.31284173487795;AWGN(18.525)+edges_mask;AWGN(1.0250000000000001)+edges_mask;JPEG(25)+edges_mask
 theunknown;;;;;;
 trentinowarriors;56.77436360274055;58.837053543508276;55.620054511508776;Sharp(0.141875)+attack_mask;Sharp(0.110625)+attack_mask;JPEG(86)+edges_mask
-=======
 wadeinthewater;;;;;;
 theunknown;44.36222040139468;46.627134283235804;45.52612242057311;Sharp(0.07625)+noisy_mask;Sharp(0.054375),noisy_mask;Sharp(0.06375),noisy_mask
 trentinowarriors;;;;;;
->>>>>>> d3e8248 (logger updates)
 bandsofbits;62.3213442593514;64.67461155951231;63.757960731647785;JPEG(89)+edges_mask;JPEG(88)+edges_mask;JPEG(86)+edges_mask
 
 
@@ -55,10 +46,7 @@ tree,wadeinthewater,39.774205818635494,AWGN(18.525),edges_mask
 # buildings,theunknown,46.627134283235804,Sharp(0.054375),noisy_mask
 # rollercoaster,theunknown,45.52612242057311,Sharp(0.06375),noisy_mask
 # tree,theunknown,44.36222040139468,Sharp(0.07625),noisy_mask
-<<<<<<< HEAD
 
 # buildings,ecorp,36.23709636439473,JPEG(6),noisy_mask (inverse)
 # ECORP FINDS WATERMARK IN DESTROYED IMAGES (wpsnr of 22)
-=======
 # rollercoaster,acme,35.750180722791676,Sharp(0.1575),edges_mask
->>>>>>> d3e8248 (logger updates)
