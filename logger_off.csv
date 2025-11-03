@@ -22,3 +22,11 @@ bandsofbits;62.3213442593514;64.67461155951231;63.757960731647785;JPEG(89)+edges
 # buildings,bandsofbits,64.67461155951231,JPEG(88),edges_mask
 # rollercoaster,bandsofbits,63.757960731647785,JPEG(86),edges_mask
 # tree,bandsofbits,62.3213442593514,JPEG(89),edges_mask
+
+
+# buildings,pixeldef,45.32518567147722,Median([3, 3]),no_mask
+# rollercoaster,pixeldef,43.862320998305584,JPEG(17),no_mask
+# tree,pixeldef,43.574476359180814,Resize(0.75),edges_mask
+# buildings,theunknown,46.627134283235804,Sharp(0.054375),noisy_mask
+# rollercoaster,theunknown,45.52612242057311,Sharp(0.06375),noisy_mask
+# tree,theunknown,44.36222040139468,Sharp(0.07625),noisy_mask
