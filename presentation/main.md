@@ -1,27 +1,33 @@
 ---
 ---
 
-# Embedding 
-``` python
-# DWT
-block = image[block_location]
-coeffs = wavedec2(block, wavelet="haar", level=1)
-LLb = coeffs[0]
+# Embedding
+- reshape watermark to 32x32 and take $U_w,V_w,W_w = SVD(watermark)$
+- $U_w,W_w$ hardcoded in the detection, $V_w$ are the singular values
+- choose $x$ square blocks
+- forall $i<x$:
+    - take $LL_b$ of the DWT of $blocks[i]$ 
+    - compute the singular values $V_b$ of its $LL$
+    - embed $V[i]$ into the first singular value($V_b[0]$)
+    - inverse the first two steps to reconstruct the block, and put it back into the image 
 
-# SVD
-Ub, Sb, Vb = np.linalg.svd(LLb)
-Sb[0] += Swm[idx] * ALPHA
+---
 
-# iSVD
-LLnew = Ub.dot(np.diag(Sb)).dot(Vb)
-# iDWT
-coeffs[0] = LLnew
-block_watermarked = waverec2(coeffs, wavelet="haar")
-```
+![width:900px](./embedding.png)
 
 ---
 
 # Detection
+- use difference between original and watermarked image to find $x$ watermarked blocks
+- forall $i<x$
+    - LL of DWT of $blocks[i]$
+    - $V_B=$ SVD of LL
+    - extract $V_w$ from difference between $V_b[0]$   
+
+
+---
+
+![width:1100px](./extraction.png)
 
 ---
 
