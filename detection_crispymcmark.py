@@ -4,7 +4,7 @@ from cv2 import imread
 import numpy as np
 
 # embedded parameters
-ALPHA = 10.0
+ALPHA = 9.0
 BLOCK_SIZE = 8
 WATERMARK_SIZE = 1024
 
