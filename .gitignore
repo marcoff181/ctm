@@ -209,7 +209,6 @@ __marimo__/
 # mineeeee
 attacked_groups_images/*
 attack_diffs/*
-tmp_attacks/*
 attack_parameter_study_results.png 
 extraction_overview.png
 full_embedding_detection_overview.png
