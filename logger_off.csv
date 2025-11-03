@@ -1,0 +1,18 @@
+;DEFENCE;;;;;
+;Embedding Params;wpsnr;;;;
+building.bmp;;;;;;
+rollercoaster.bmp;;;;;;
+tree.bmp;;;;;;
+;;;;;;
+ATTACK;;;;;;
+group_name;wpsnr_tree;wpsnr_building;wpsnr_rollercoaster;Attack used for tree.bmp;Attack used for building.bmp;Attack used for rollercoaster.bmp
+pixeldef;;;;;;
+ecorp;;;;;;
+ghostmark;;;;;;
+smokeonthewatermark;;;;;;
+crispymcmark;;;;;;
+acme;;;;;;
+shadowmark;;;;;;
+wadeinthewater;;;;;;
+theunknown;;;;;;
+trentinowarriors;;;;;;
