@@ -85,7 +85,6 @@ h1 {
 - Multiplicative embedding was harder to tweak
 - Understanding how the algorithm performed/finding bugs based on the ROC function. 
 
-
 ---
 
 # ROC1: Original 
@@ -107,6 +106,14 @@ ROC1 + label 0 for original(attacked) images + label 0 for destroyed
 <br>
 
 ---
+
+# Possible Improvements 
+- Add redundancy based on singular value importance 
+- Improve the invisibility of attack squares, either by block choice or embedding strength
+- explore different embedding techniques on each block
+
+--- 
+
 
 # Attack Strategy
 - binary search to find optimal attack strength
@@ -131,13 +138,6 @@ ROC1 + label 0 for original(attacked) images + label 0 for destroyed
 ![width:700px](./gui.png)
 
 ---
-
-# Possible Improvements 
-- Add redundancy based on singular value importance 
-- Improve the invisibility of attack squares, either by block choice or embedding strength
-- explore different embedding techniques on each block
-
---- 
 
 <div class="columns">
 <div>
