@@ -39,10 +39,10 @@ h1 {
 ---
 
 # How we reached the final implementation
-- found papers about DWT-SVD
-- began with DWT-SVD on the whole image
+- began with DWT-SVD on the whole image (papers implementations)
+- had problems using multiplicative embedding
 - then transitioned to blocks, embedding two singular values for each block
-- switched to embedding one singular value per block
+- switched to embedding one singular value per block (made them a bit larger)
 
 ---
 
@@ -78,7 +78,7 @@ h1 {
 
 ---
 
-# Current limitations 
+# Current Limitations 
 - Embedding quality performed better on images with high entropy zones
 - On low entropy images embedding was more visible 
 - Not enough time to refine the design and try different techniques
