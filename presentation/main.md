@@ -78,23 +78,22 @@ h1 {
 
 ---
 
-# Implementation challenges 
+# Current limitations 
 - Embedding quality performed better on images with high entropy zones
 - On low entropy images embedding was more visible 
 - Not enough time to refine the design and try different techniques
-- Multiplicative embedding was harder to tweak
 - Understanding how the algorithm performed/finding bugs based on the ROC function. 
 
 ---
 
-# ROC1: Original 
+# Original ROC
 ![width:600px](./roc_original.png)
 <br>
 
 ---
 
 <!-- nella presentazione spiegare che qui è uguale ma che quando stavamo facendo sviluppo veniva diverso/ci ha forzato a cambiare threshold -->
-# ROC2
+# Final ROC
 ![width:600px](./roc_3.png)
 ROC1 + label 0 for original(attacked) images + label 0 for destroyed 
 
@@ -140,14 +139,43 @@ ROC1 + label 0 for original(attacked) images + label 0 for destroyed
 ---
 
 <div class="columns">
-<div>
+  <div>
 
-# Questions?
+  # Questions?
 
+  </div>
+
+  <div>
+
+  ![width:500](./gorilla.jpg)
+
+  </div>
 </div>
-<div>
 
-![width:500](./gorilla.jpg)
+---
 
-</div>
+# Don't go on
+
+---
+
+# Trust me, the presentation is over
+
+---
+
+# Special thanks
+
+<div class="columns">
+  <div>
+  
+  - **Cursed lama** - for making our nights less lonely
+  - **Claudio** - for parallelization
+  - **Our opponents** - for a fair "challenge"
+
+  </div>
+
+  <div>
+
+  ![width:500](./cursed_lama.jpg)
+
+  </div>
 </div>
