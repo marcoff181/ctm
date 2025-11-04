@@ -127,27 +127,36 @@ We started exploring the current SOTA regarding digital watermarking techniques 
 
 This watermarking process first prepares the watermark by converting it into a compact "fingerprint", by reshaping the watermark to a  $32 \times 32$ image. We then performs a Singular Value Decomposition (SVD), and extracts just its singular values. This 32-value vector is the data that will be hidden.
 
-Next, the algorithm intelligently selects the best places in the host image to embed this data. We scan the image to find the top 16 "best" $16 \times 16$ blocks. The "best" blocks are determined by favoring **textured, complex blocks** (which have high entropy) and avoiding simple, flat, or high-contrast blocks where any changes would be visually obvious. These 16 chosen blocks are then sorted by their location to ensure they are always processed in the same deterministic order.
+Next, the algorithm intelligently selects the best places in the host image to embed this data. We scan the image to find the top 13 "best" $8 \times 8$ blocks. The "best" blocks are determined by favoring **textured, complex blocks** (which have high entropy) and avoiding simple, flat, or high-contrast blocks where any changes would be visually obvious. These 13 chosen blocks are then sorted by their location to ensure they are always processed in the same deterministic order.
 
-Finally, the embedding function loops through these 16 selected blocks to insert the watermark. For each block, it applies a Discrete Wavelet Transform (DWT) to isolate the $LL$ sub-band, which is the most robust, low-frequency approximation of the block. It then performs an SVD on this $LL$ sub-band to get *its* singular values. The **core embedding** happens here: the block's largest singular value (The first) is modified by adding the value from the watermark's fingerprint, scaled by the $\alpha$ strength. The block is then rebuilt using an inverse SVD and inverse DWT, and this newly watermarked block replaces the original in the image.
+Finally, the embedding function loops through these 13 selected blocks to insert the watermark. For each block, it applies a Discrete Wavelet Transform (DWT) to isolate the $LL$ sub-band, which is the most robust, low-frequency approximation of the block. It then performs an SVD on this $LL$ sub-band to get *its* singular values. The **core embedding** happens here: the block's largest singular value (The first) is modified by adding the value from the watermark's fingerprint, scaled by the $\alpha$ strength. The block is then rebuilt using an inverse SVD and inverse DWT, and this newly watermarked block replaces the original in the image.
+
+![Embedding](./presentation/embedding.png)
 
 ### Detection (Non-Blind technique)
 
-The detection itself begins by locating the 16 hidden data blocks. This is done simply by comparing the original image with the watermarked image; the blocks that show a difference are the ones that carry the data. With these locations identified, the core data retrieval begins. For each block, the algorithm mathematically reverses the embedding process: it decomposes both the original block and the corresponding attacked block into their robust, low-frequency $LL$ components using a DWT. After applying SVD to both, it isolates the embedded data by calculating the **difference** between the largest singular value of the attacked block and that of the original block. This difference, when scaled down, reveals the single piece of watermark data hidden in that block.
+The detection itself begins by locating the 13 hidden data blocks. This is done simply by comparing the original image with the watermarked image; the blocks that show a difference are the ones that carry the data. With these locations identified, the core data retrieval begins. For each block, the algorithm mathematically reverses the embedding process: it decomposes both the original block and the corresponding attacked block into their robust, low-frequency $LL$ components using a DWT. After applying SVD to both, it isolates the embedded data by calculating the **difference** between the largest singular value of the attacked block and that of the original block. This difference, when scaled down, reveals the single piece of watermark data hidden in that block.
 
 This process yields a 32-value "fingerprint" (the singular values). To reconstruct the full watermark image, this fingerprint is mathematically combined with two hardcoded matrices (`Uwm` and `Vwm`), which represent the original watermark's structural SVD components. The resulting matrix is then flattened and binarized (converted to 0s and 1s) to create the final digital signature.
 
-Finally, the detection is a two-part test. First, the retrieved watermark signature is compared to the "clean" reference watermark signature to get a bit-matching **similarity score**. Second, the perceptual **image quality** of the attacked image is measured using a **Weighted PSNR (WPSNR)**. The watermark is only considered "detected" if the similarity score is high (above 0.55, computed using the **ROC**) *and* the image quality is still acceptable (above the minimum WPSNR threshold, of $35 dB$).
+Finally, the detection is a two-part test. First, the retrieved watermark signature is compared to the "clean" reference watermark signature to get a bit-matching **similarity score**. Second, the perceptual **image quality** of the attacked image is measured using a **Weighted PSNR (WPSNR)**. The watermark is only considered "detected" if the similarity score is high (above 0.70, computed using the **ROC**).
+
+![Detection](./presentation/extraction.png)
 
 ### Attack
 
 The core of the attack is a **binary search**. For each of the six attack types (like JPEG, Blur, or Noise), the script doesn't just apply one strong, fixed attack. Instead, it intelligently searches for the "sweet spot": the **strongest attack parameter** (e.g., the lowest JPEG quality) that causes the detection function to *just* fail, while simultaneously ensuring the image's perceptual quality (measured by **WPSNR**) remains above a minimum threshold. This process is repeated with **masks**, applying the attack only to specific regions (like edges or noisy areas) where the watermark is likely hidden and the visual changes are less noticeable.
 
+![attack-plot](./presentation/attack_plot_new.png)
+
 ### ROC calculation
 
-The computation of the ROC curve differs from the implementation explained in the challenge rules by adding a new null hypothesis ($H_{0}$) which is the extraction of the watermark from an attacked original (unwatermarked) image.
+The computation of the ROC curve differs from the implementation explained in the challenge rules by adding new null hypothesis ($H_{0}$) which are: 
+  
+- The extraction of the watermark from an attacked original (unwatermarked) image.
+- The extraction of the watermark from destroyed images ($wPSNR <= 25.0dB$)
 
-We felt the need to add this step as it would create a AUC of 1.0 without it and it helps make the ROC curve more representative of real-world performance.
+We felt the need to add this step as it would create a AUC of 1.0 without it and it helps make the ROC curve both, more representative of real world performance and also comply to the challenge rules.
 
 ![ROC](roc_crispymcmark.png)
 
@@ -165,7 +174,7 @@ cp images/0005.bmp challenge_images/
 ```
 
 1. **Embed watermark:**  
-   `python crispy_embedder.py 5.0 0005.bmp`
+   `python crispy_embedder.py 0005.bmp`
 
 2. **Apply attack:**  
    `python attack.py`
@@ -216,7 +225,7 @@ print(f"Detected: {detected}, WPSNR: {wpsnr_val:.2f} dB")
 from attack import attack_config, param_converters
 
 import cv2
-img = cv2.imread("./watermarked_groups_images/crispymcmark_0002.bmp", 0)
+img = cv2.imread("./watermarked_groups_images/crispymcmark_tree.bmp", 0)
 
 # Choose attack by name
 attack_name = "JPEG"  # or any key from attack_config
@@ -226,7 +235,7 @@ attack_func = attack_config[attack_name]
 params = param_converters[attack_name](strength)
 attacked = attack_func(img, strength)
 
-cv2.imwrite(f"./attacked_groups_images/crispymcmark_crispymcmark_0002_{attack_name}_{params}.bmp", attacked)
+cv2.imwrite(f"./attacked_groups_images/crispymcmark_crispymcmark_tree_{attack_name}_{params}.bmp", attacked)
 ```
 
 ## License
