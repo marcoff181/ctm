@@ -38,6 +38,15 @@ h1 {
 
 ---
 
+# How we reached the final implementation
+- found papers about DWT-SVD
+- began with DWT-SVD on the whole image
+- then transitioned to blocks, embedding two singular values for each block
+- switched to embedding one singular value per block
+
+---
+
+
 <!-- paginate: true -->
 
 # Embedding
@@ -66,6 +75,36 @@ h1 {
 ---
 
 ![width:1100px](./extraction.png)
+
+---
+
+# Implementation challenges 
+- Embedding quality performed better on images with high entropy zones
+- On low entropy images embedding was more visible 
+- Not enough time to refine the design and try different techniques
+- Multiplicative embedding was harder to tweak
+- Understanding how the algorithm performed/finding bugs based on the ROC function. 
+
+
+---
+
+# ROC1: Original 
+![width:600px](./roc_original.png)
+<br>
+
+---
+
+<!-- nella presentazione spiegare che qui è uguale ma che quando stavamo facendo sviluppo veniva diverso/ci ha forzato a cambiare threshold -->
+# ROC2
+![width:600px](./roc_3.png)
+ROC1 + label 0 for original(attacked) images + label 0 for destroyed 
+
+---
+
+# Effects of hardcoding the watermark 
+<!-- if we try to embed a different watermark than our group's the algorithm is shit -->
+![width:600px](./roc_broken.png)
+<br>
 
 ---
 
@@ -98,44 +137,7 @@ h1 {
 - Improve the invisibility of attack squares, either by block choice or embedding strength
 - explore different embedding techniques on each block
 
----
-
-# Implementation challenges 
-- Embedding quality performed better on images with high entropy zones
-- On low entropy images embedding was more visible 
-- Not enough time to refine the design and try different techniques
-- Multiplicative embedding was harder to tweak
-- Understanding how the algorithm performed/finding bugs based on the ROC function. 
-
-
----
-
-# ROC1: Original 
-![width:600px](./roc_original.png)
-
-
----
-
-<!-- nella presentazione spiegare che qui è uguale ma che quando stavamo facendo sviluppo veniva diverso/ci ha forzato a cambiare threshold -->
-# ROC2
-![width:600px](./roc_3.png)
-ROC1 + label 0 for original(attacked) images + label 0 for destroyed 
-
----
-
-# Effects of hardcoding the watermark 
-<!-- if we try to embed a different watermark than our group's the algorithm is shit -->
-![width:600px](./roc_broken.png)
-
 --- 
-
-# How we reached the final implementation
-- found papers about DWT-SVD
-- began with DWT-SVD on the whole image
-- then transitioned to blocks, embedding two singular values for each block
-- switched to embedding one singular value per block
-
----
 
 <div class="columns">
 <div>
