@@ -175,7 +175,7 @@ So, the takeaway? Our algorithm is pretty good... as long as you're not trying t
 # Possible Improvements 
 - Add redundancy based on singular value importance 
 - Improve the invisibility of attack squares, either by block choice or embedding strength
-- explore different embedding techniques on each block
+- Explore alternative block embedding techniques
 
 --- 
 
@@ -214,34 +214,6 @@ So, the takeaway? Our algorithm is pretty good... as long as you're not trying t
   <div>
 
   ![width:500](./gorilla.jpg)
-
-  </div>
-</div>
-
----
-
-# Don't go on
-
----
-
-# Trust me, the presentation is over
-
----
-
-# Special thanks
-
-<div class="columns">
-  <div>
-  
-  - **Cursed lama** - for making our nights less lonely
-  - **Claudio** - for parallelization
-  - **Our opponents** - for a fair "challenge"
-
-  </div>
-
-  <div>
-
-  ![width:500](./cursed_lama.jpg)
 
   </div>
 </div>
