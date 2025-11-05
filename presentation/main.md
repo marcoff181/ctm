@@ -116,7 +116,8 @@ After we recovered both watermark we compute the Bit Error Rate similarity which
 
 <!-- So, we built our watermarking tool, but it has its limits.
 
-Quickly, our embedding works better on complex images with lots of detail, but it is more visible on simple images.
+Quickly, our embedding works better on complex images with lots of detail, but it is more visible on low entropy images.
+
 We also ran out of time to try other techniques, and just understanding what our results meant was not so straighforward.
 
 This brings me to the ROC curve, which is the scorecard we used to see how well our technique worked -->
@@ -149,7 +150,7 @@ This is the result. A much more honest curve. An AUC of 0.980, a score we can ac
 
 # ROC
 ![width:600px](./roc_3.png)
-ROC1 + label 0 for original(attacked) images + label 0 for destroyed 
+ROC + label 0 for original (attacked) images + label 0 for destroyed 
 
 ---
 
@@ -164,7 +165,7 @@ Well, you get this. An AUC of 0.398.
 
 At this point, you would have a more accurate detection function... by just flipping a coin.
 
-So, the takeaway? Our algorithm is fantastic... as long as you're not trying to find any watermark but its own! Thank you -->
+So, the takeaway? Our algorithm is pretty good... as long as you're not trying to find any watermark but its own! -->
 
 ![width:600px](./roc_broken.png)
 <br>
