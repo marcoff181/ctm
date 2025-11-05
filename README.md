@@ -67,9 +67,8 @@ attack_results/            # Attack logs and results
 Embed a watermark into an image using DWT-SVD:
 
 ```sh
-python crispy_embedder.py 5.0 0005.bmp
+python crispy_embedder.py 0005.bmp
 ```
-- `5.0` is the embedding strength (ALPHA).
 - `0005.bmp` is the image filename in `challenge_images/`.
 
 ### 2. Watermark Detection
