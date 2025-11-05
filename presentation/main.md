@@ -78,7 +78,14 @@ h1 {
 
 ---
 
-# Current Limitations 
+<!-- So, we built our watermarking tool, but it has its limits.
+
+Quickly, our embedding works better on complex images with lots of detail, but it is more visible on simple images.
+We also ran out of time to try other techniques, and just understanding what our results meant was not so straighforward.
+
+This brings me to the ROC curve, which is the scorecard we used to see how well our technique worked -->
+
+# Current Limitations
 - Embedding quality performed better on images with high entropy zones
 - On low entropy images embedding was more visible 
 - Not enough time to refine the design and try different techniques
@@ -86,21 +93,43 @@ h1 {
 
 ---
 
-# Original ROC
+<!-- This was our first score. An AUC of 1.0. A perfect square.
+
+It looked a little too perfect... and it was.
+
+We discovered our watermark was found also in non watermarked images, and destroyed images.
+
+That perfect score wasn't real. -->
+
+# ROC
 ![width:600px](./roc_original.png)
 <br>
 
 ---
 
-<!-- nella presentazione spiegare che qui è uguale ma che quando stavamo facendo sviluppo veniva diverso/ci ha forzato a cambiare threshold -->
-# Final ROC
+<!-- To fix this, we had to create a proper 'H0' set. We fed the detector images that were truly destroyed, and we also added original, non-watermarked images. We essentially told the ROC, 'You are not allowed to find a watermark in these.'
+
+This is the result. A much more honest curve. An AUC of 0.980, a score we can actually trust. This realistic curve is what allowed us to find the correct, balanced threshold for detection -->
+
+# ROC
 ![width:600px](./roc_3.png)
 ROC1 + label 0 for original(attacked) images + label 0 for destroyed 
 
 ---
 
 # Effects of hardcoding the watermark 
-<!-- if we try to embed a different watermark than our group's the algorithm is shit -->
+<!-- But this whole process revealed a... funny quirk.
+
+Our detector is, let's say, very loyal. To make it work so well, we had to hardcode parts of our specific watermark, the U and W vectors, right into the detection function. It's trained to find one watermark only.
+
+So, what happens if you try to find a different watermark?
+
+Well, you get this. An AUC of 0.398.
+
+At this point, you would have a more accurate detection function... by just flipping a coin.
+
+So, the takeaway? Our algorithm is fantastic... as long as you're not trying to find any watermark but its own! Thank you -->
+
 ![width:600px](./roc_broken.png)
 <br>
 
