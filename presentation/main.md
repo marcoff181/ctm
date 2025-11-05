@@ -37,17 +37,28 @@ h1 {
 
 
 ---
+<!-- 
 
+
+After some research on the subject we decide to stick with DWT-SVD it and embed the whole watermark in the LL subband of the whole image, this had two main problem, low wPSNR and also low robustness. 
+
+We tried to improve the robustness by using multiplicative approach without good result, so we decided to stick with additive. 
+
+Later, We thought about a block based approach, embedding two singular values in block 4x4 this yielded far better robustness but made the first block of the watermarked image more visible. 
+
+To improve visibility we decided to: firstly, embed a singular value per block, secondly, made them a bit larger (8x8) to make it blend more with the image and, lastly embed them in high entropy zones.
+
+And this basically is really close to the current solution for the embedding...
+-->
 # How we reached the final implementation
-- began with DWT-SVD on the whole image (papers implementations)
-- had problems using multiplicative embedding
-- then transitioned to blocks, embedding two singular values for each block
-- switched to embedding one singular value per block (made them a bit larger)
+- initial DWT-SVD implementation
+- multiplicative embedding
+- initial block implementation
+- final block implementation
 
 ---
 
 
-<!-- paginate: true -->
 
 # Embedding
 - reshape watermark to 32x32 and take $U_w,V_w,W_w = SVD(watermark)$
@@ -60,7 +71,21 @@ h1 {
     - inverse the first two steps to reconstruct the block, and put it back into the image 
 
 ---
+<!-- 
+The current approach start by taking the original image and selecting the best blocks scored on overall entropy (The higher the better).
 
+We also compute the SVD of the watermark extracting the singular values
+
+After we compute the DWT and SVD of each block extracting the singular values. We compute the additive embedding for each block with only one singular value of the watermark embedded always in the first position.
+
+Lastly we compute the inverse SVD and inverse DWT reconstructing the overall watermark image.
+
+The U and V component of the watermark SVD result are hardcoded in the detection (as per challnge rules).
+
+This technique allowed us in general to emebed less information compared to the 1024 bits. Making us able to embed with a high wPSNR and high robustness.
+
+The choice of using entropy made hiding the watermarked block easier but it did not always work.
+ -->
 ![width:900px](./embedding.png)
 
 ---
@@ -73,7 +98,18 @@ h1 {
 
 
 ---
+<!-- 
+For the detection we exploited the fact that we had access to also the watermarked image, finding the block locations as simple as doing a diff between watermarked and original collecting all of the blocks. 
 
+This was possible becasue we embed them in the same order as we retrieve them, so that we are always sure that the block that we retrieve first is the first block.
+
+After retrieving the block location we compute DWT-SVD on both the original and watermark, this gave us the singular values of the watermark which after inverse of SVD (using the original hardcoded U and V component) gave us the original watermark.
+
+The same process was applied for the difference using the original and attacked image. 
+
+After we recovered both watermark we compute the Bit Error Rate similarity which had a Thresold computed using the ROC of 0.7 
+
+ -->
 ![width:1100px](./extraction.png)
 
 ---
