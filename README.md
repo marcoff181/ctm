@@ -1,79 +1,228 @@
-# CrispyMcMark Watermarking & Attack Suite
+# CrispyMcMark — Watermarking & Attack Suite
 
-This is the repository related to the *Capture the Mark* competion held in the University of Trento for the Multimedia Data Security course, for the academic year 2025/2026.
+Competition repository for *Capture the Mark* (Multimedia Data Security, University of Trento, 2025/2026).
 
-Group name: **crispymcmark**
+**Group:** crispymcmark
+
+---
+
+## Competition Results 🏆
+
+| Category | Rank | Metric | Score |
+|----------|------|--------|-------|
+| **Robustness** | 🥇 1st | Avg. attack WPSNR required | 41.16 dB |
+| **Activity** | 🥇 1st | Teams attacked | 100% |
+| **Quality** | 🥇 1st | Attacks above avg. WPSNR | 18 |
+| **Defense** | 🥉 3rd | Avg. watermarked WPSNR | 63.05 dB |
+
+![Final Score](presentation/image.png)
+
+---
 
 ## Overview
 
-This repository provides a complete framework for robust image watermarking, attack simulation, and detection. It includes:
+Complete framework for robust image watermarking with:
+- **DWT-SVD block-based embedding** — high robustness, minimal visibility
+- **Non-blind detection** — compares original, watermarked, and attacked images
+- **Automated attack suite** — binary search + region masks to remove watermarks
+- **ROC analysis** — threshold optimization with proper H₀ handling
+- **Visualization & GUI** — inspect embedding/detection logic interactively
 
-- **Watermark embedding and detection algorithms** (DWT-SVD, LSB)
-- **Attack simulation** (AWGN, blur, sharpening, resizing, JPEG compression, median filtering)
-- **Visualization tools** for embedding/detection logic and attack effects
-- **ROC analysis** and quality metrics (WPSNR, BER)
-- **GUI** for interactive attack and detection experiments
+**Key Design Choice:** We embed only **13 singular values** (not 1024 bits) in high-entropy 8×8 blocks, achieving superior WPSNR and robustness.
 
-## Directory Structure
-
-```
-attack_functions.py         # Attack implementations
-attack.py                  # Attack orchestration and logging
-crispy_embedder.py         # Main embedder for DWT-SVD watermarking
-crispymcmark.npy           # Default watermark
-detection_crispymcmark.py  # Detection logic for DWT-SVD watermark
-embedding.py               # Embedding logic for DWT-SVD watermark
-example_python.py          # Example usage
-gui_roba.py                # Tkinter GUI for attacks/detection
-plot_attacks.py            # Attack parameter visualization
-roc_crispymcmark.py        # ROC curve computation
-utilities.py               # Helper functions (masks, metrics, visualization)
-visualize_embedding.py     # Embedding/detection visualization
-wpsnr.py                   # WPSNR metric
-lsb/                       # LSB watermarking (embedding/detection)
-challenge_images/          # Original images for watermarking
-watermarked_groups_images/ # Watermarked images
-attacked_groups_images/    # Attacked images
-tmp_attacks/               # Temporary attack results
-attack_results/            # Attack logs and results
-```
+---
 
 ## Installation
 
-1. **Clone the repository:**
-   ```sh
-   git clone https://github.com/yourusername/crispymcmark.git
-   cd crispymcmark
-   ```
-
-2. **Install dependencies:**
-   ```sh
-   pip install -r requirements.txt
-   ```
-
-   Main dependencies:
-   - numpy
-   - scipy
-   - matplotlib
-   - scikit-image
-   - opencv-python
-   - Pillow
-   - scikit-learn
-
-## Usage
-
-### 1. Watermark Embedding
-
-Embed a watermark into an image using DWT-SVD:
-
-```sh
-python crispy_embedder.py 0005.bmp
+```bash
+git clone https://github.com/yourusername/crispymcmark.git
+cd crispymcmark
+pip install -r requirements.txt
 ```
-- `0005.bmp` is the image filename in `challenge_images/`.
 
-### 2. Watermark Detection
+**Dependencies:** numpy, scipy, matplotlib, opencv-python, scikit-learn, PyWavelets
 
-Detect watermark in an attacked image:
+---
+
+## Quick Start
+
+```bash
+# 1. Embed watermark
+python crispy_embedder.py 0005.bmp
+
+# 2. Attack watermarked images
+python attack.py
+
+# 3. Detect watermark
+python detection_crispymcmark.py
+
+# 4. Visualize embedding
+python visualize_embedding.py challenge_images/0005.bmp watermarked_groups_images/crispymcmark_0005.bmp
+
+# 5. Compute ROC curve
+python roc_crispymcmark.py
+```
+
+---
+
+## How It Works
+
+### 1. Embedding
+
+**Goal:** Hide 13 singular values from the watermark into 13 image blocks.
+
+**Process:**
+1. **Prepare watermark fingerprint**
+   - Reshape 1024-bit watermark → 32×32 matrix
+   - Compute SVD: `U, S, V = svd(watermark)`
+   - Extract singular values `S` (32 values)
+   - Hardcode `U` and `V` in [`detection_crispymcmark.py`](detection_crispymcmark.py) (per challenge rules)
+
+2. **Select embedding locations**
+   - Score all 8×8 blocks using SVD entropy (see [`select_best_blocks`](embedding.py))
+   - Choose top 13 blocks with highest complexity (avoid flat/edge regions)
+   - Sort by spatial location for deterministic ordering
+
+3. **Embed data**
+   - For each of 13 blocks:
+     - Apply DWT → extract LL sub-band (low-frequency component)
+     - Compute SVD of LL: `U_b, S_b, V_b = svd(LL)`
+     - Modify largest singular value: `S_b[0] += α * S[i]` (α=9.0)
+     - Reconstruct: `LL_new = U_b @ diag(S_b) @ V_b`
+     - Inverse DWT → watermarked block
+
+**Result:** 13 blocks carry one singular value each. WPSNR ≈ 63 dB.
+
+![Embedding Diagram](./presentation/embedding_bg.png)
+
+**Key Files:**
+- [`embedding.py`](embedding.py) — main embedding logic
+- [`crispy_embedder.py`](crispy_embedder.py) — CLI wrapper
+- [`detection_crispymcmark.py`](detection_crispymcmark.py) — hardcoded `U_wm`, `V_wm` matrices
+
+---
+
+### 2. Detection (Non-Blind)
+
+**Goal:** Extract watermark from attacked image and verify it matches the original.
+
+**Process:**
+1. **Locate watermarked blocks**
+   - Compare original vs. watermarked images
+   - Identify 13 blocks with changes (see [`identify_watermarked_blocks`](detection_crispymcmark.py))
+
+2. **Extract singular values**
+   - For each block in attacked image:
+     - Apply DWT → extract LL
+     - Compute SVD: `S_attacked = svd(LL_attacked)`
+     - Extract difference: `S_extracted[i] = (S_attacked[0] - S_original[0]) / α`
+
+3. **Reconstruct watermark**
+   - Combine extracted singular values with hardcoded `U_wm`, `V_wm`:
+     ```python
+     watermark_matrix = U_wm @ diag(S_extracted) @ V_wm
+     ```
+   - Flatten and binarize → 1024-bit watermark
+
+4. **Verify detection**
+   - Compute similarity: `sim = 1 - BER(original_wm, extracted_wm)`
+   - Measure quality: `wpsnr_val = wpsnr(original_img, attacked_img)`
+   - **Decision:** Watermark detected if `sim > 0.70` (threshold from ROC)
+
+![Detection Diagram](./presentation/extraction_bg.png)
+
+**Key Files:**
+- [`detection_crispymcmark.py`](detection_crispymcmark.py) — `detection(original_path, watermarked_path, attacked_path)`
+- [`wpsnr.py`](wpsnr.py) — weighted PSNR metric
+
+---
+
+### 3. Attack Strategy
+
+**Goal:** Remove watermark while keeping WPSNR > 35 dB (challenge requirement).
+
+**Binary Search Process:**
+1. **For each attack type** (JPEG, Blur, AWGN, Resize, Median, Sharpen):
+   - Start with strength range [0.0, 1.0]
+   - Iteratively test mid-point strength
+   - If watermark detected → increase strength
+   - If watermark not detected AND WPSNR ≥ 35 dB → **success**, decrease strength to find stronger attack
+   - If WPSNR < 35 dB → decrease strength
+   - Repeat 6 iterations (see [`BIN_SEARCH_ITERATIONS`](attack.py))
+
+2. **Region Masking:**
+   - Apply attacks only to specific regions using masks:
+     - [`frequency_mask`](utilities.py) — target mid-frequency DCT/DWT bands
+     - [`entropy_mask`](utilities.py) — target high-entropy blocks (where watermark likely is)
+     - [`edges_mask`](utilities.py) — attack edges (less visible)
+     - [`noisy_mask`](utilities.py) — attack high-variance regions
+     - [`saliency_mask`](utilities.py) — attack non-salient regions
+     - [`border_mask`](utilities.py) — attack image borders
+   - Masking formula: `attacked_img = mask ? attack(img) : img`
+
+3. **Parallelization:**
+   - Run all attack×mask combinations concurrently using [`ProcessPoolExecutor`](attack.py)
+   - Use [`MAX_WORKERS = os.cpu_count()`](attack.py) processes
+
+**Output:**
+- Best attack saved to [`attacked_groups_images/`](attacked_groups_images/)
+- All attempts logged to [`attacks_log.csv`](attacks_log.csv)
+- Summary in [`best_attacks_log.csv`](best_attacks_log.csv)
+
+![Attack Plot](./presentation/attack_plot_new.png)
+![Mask Examples](./presentation/burger_masks.png)
+
+**Key Files:**
+- [`attack.py`](attack.py) — orchestration, binary search, parallelization
+- [`attack_functions.py`](attack_functions.py) — JPEG, Blur, AWGN, Resize, Median, Sharpen
+- [`utilities.py`](utilities.py) (now [`masks.py`](masks.py)) — mask generators
+
+---
+
+### 4. ROC Analysis
+
+**Goal:** Find optimal detection threshold (balance false positives vs. false negatives).
+
+**Our Approach (Differs from Challenge Baseline):**
+
+**H₁ (Watermark Present):**
+- Extract watermark from randomly attacked watermarked images
+- Compare with original watermark
+
+**H₀ (Watermark Absent):**
+1. Extract watermark from **attacked original (non-watermarked) images**
+2. Extract watermark from **destroyed images** (WPSNR ≤ 25 dB)
+3. Compare extracted watermark with **random noise watermark**
+
+**Why This Matters:**
+- Initial naive ROC gave AUC = 1.0 (perfect square) — **too good to be true**
+- Reason: Detector found "watermarks" in non-watermarked images
+- Adding proper H₀ samples → AUC = 0.980 (realistic)
+- **Threshold chosen:** 0.70 (from FPR < 0.12 criterion)
+
+![ROC Curve](roc_crispymcmark.png)
+
+**Key Files:**
+- [`roc_crispymcmark.py`](roc_crispymcmark.py) — ROC computation with enhanced H₀
+
+---
+
+## Python API Examples
+
+### Embed Watermark
+
+```python
+from embedding import embedding
+import cv2
+
+watermarked = embedding(
+    "./challenge_images/0005.bmp",
+    "crispymcmark.npy"
+)
+cv2.imwrite("./watermarked_groups_images/crispymcmark_0005.bmp", watermarked)
+```
+
+### Detect Watermark
 
 ```python
 from detection_crispymcmark import detection
@@ -81,162 +230,91 @@ from detection_crispymcmark import detection
 detected, wpsnr_val = detection(
     "./challenge_images/0005.bmp",
     "./watermarked_groups_images/crispymcmark_0005.bmp",
-    "./attacked_groups_images/crispymcmark_crispymcmark_0005.bmp"
+    "./attacked_groups_images/attacked_0005.bmp"
 )
 print(f"Detected: {detected}, WPSNR: {wpsnr_val:.2f} dB")
 ```
 
-### 3. Simulate Attacks
-
-Run attacks and log results:
-
-```sh
-python attack.py
-```
-
-### 4. Visualize Embedding & Detection
-
-Generate visualizations:
-
-```sh
-python visualize_embedding.py <original_image_path> <watermarked_image_path> 
-```
-
-### 5. ROC Analysis
-
-Compute ROC curve for watermark detection:
-
-```sh
-python roc_crispymcmark.py
-```
-
-### 6. GUI
-
-Launch the GUI for interactive attack/detection:
-
-```sh
-python gui_roba.py
-```
-
-## Strategy used
-
-We started exploring the current SOTA regarding digital watermarking techniques for binary watermarks. We noticed that in the literature the majority of scientific papers was regarding the **Discrete Wavelet Transform**, with the addition of the **Singular Value Decomposition**, which is a method for matrix factorization. While developing the current solution we moved away from the implementation described in the papers and focused on a simpler implementation that was more tailored for the challenge rules.
-
-### Embedding
-
-This watermarking process first prepares the watermark by converting it into a compact "fingerprint", by reshaping the watermark to a  $32 \times 32$ image. We then performs a Singular Value Decomposition (SVD), and extracts just its singular values. This 32-value vector is the data that will be hidden.
-
-Next, the algorithm intelligently selects the best places in the host image to embed this data. We scan the image to find the top 13 "best" $8 \times 8$ blocks. The "best" blocks are determined by favoring **textured, complex blocks** (which have high entropy) and avoiding simple, flat, or high-contrast blocks where any changes would be visually obvious. These 13 chosen blocks are then sorted by their location to ensure they are always processed in the same deterministic order.
-
-Finally, the embedding function loops through these 13 selected blocks to insert the watermark. For each block, it applies a Discrete Wavelet Transform (DWT) to isolate the $LL$ sub-band, which is the most robust, low-frequency approximation of the block. It then performs an SVD on this $LL$ sub-band to get *its* singular values. The **core embedding** happens here: the block's largest singular value (The first) is modified by adding the value from the watermark's fingerprint, scaled by the $\alpha$ strength. The block is then rebuilt using an inverse SVD and inverse DWT, and this newly watermarked block replaces the original in the image.
-
-![Embedding](./presentation/embedding.png)
-
-### Detection (Non-Blind technique)
-
-The detection itself begins by locating the 13 hidden data blocks. This is done simply by comparing the original image with the watermarked image; the blocks that show a difference are the ones that carry the data. With these locations identified, the core data retrieval begins. For each block, the algorithm mathematically reverses the embedding process: it decomposes both the original block and the corresponding attacked block into their robust, low-frequency $LL$ components using a DWT. After applying SVD to both, it isolates the embedded data by calculating the **difference** between the largest singular value of the attacked block and that of the original block. This difference, when scaled down, reveals the single piece of watermark data hidden in that block.
-
-This process yields a 32-value "fingerprint" (the singular values). To reconstruct the full watermark image, this fingerprint is mathematically combined with two hardcoded matrices (`Uwm` and `Vwm`), which represent the original watermark's structural SVD components. The resulting matrix is then flattened and binarized (converted to 0s and 1s) to create the final digital signature.
-
-Finally, the detection is a two-part test. First, the retrieved watermark signature is compared to the "clean" reference watermark signature to get a bit-matching **similarity score**. Second, the perceptual **image quality** of the attacked image is measured using a **Weighted PSNR (WPSNR)**. The watermark is only considered "detected" if the similarity score is high (above 0.70, computed using the **ROC**).
-
-![Detection](./presentation/extraction.png)
-
-### Attack
-
-The core of the attack is a **binary search**. For each of the six attack types (like JPEG, Blur, or Noise), the script doesn't just apply one strong, fixed attack. Instead, it intelligently searches for the "sweet spot": the **strongest attack parameter** (e.g., the lowest JPEG quality) that causes the detection function to *just* fail, while simultaneously ensuring the image's perceptual quality (measured by **WPSNR**) remains above a minimum threshold. This process is repeated with **masks**, applying the attack only to specific regions (like edges or noisy areas) where the watermark is likely hidden and the visual changes are less noticeable.
-
-![attack-plot](./presentation/attack_plot_new.png)
-
-### ROC calculation
-
-The computation of the ROC curve differs from the implementation explained in the challenge rules by adding new null hypothesis ($H_{0}$) which are: 
-  
-- The extraction of the watermark from an attacked original (unwatermarked) image.
-- The extraction of the watermark from destroyed images ($wPSNR <= 25.0dB$)
-
-We felt the need to add this step as it would create a AUC of 1.0 without it and it helps make the ROC curve both, more representative of real world performance and also comply to the challenge rules.
-
-![ROC](roc_crispymcmark.png)
-
-## Example Workflow
-
-Before embedding a watermark, ensure that your images are present in the `challenge_images` folder.  
-You can copy all (or one) images from the `images` directory using:
-
-```sh
-cp images/*.bmp challenge_images/
-```
-
-```sh
-cp images/0005.bmp challenge_images/
-```
-
-1. **Embed watermark:**  
-   `python crispy_embedder.py 0005.bmp`
-
-2. **Apply attack:**  
-   `python attack.py`
-
-3. **Detect watermark:**  
-   `python detection_crispymcmark.py`
-
-4. **Visualize results:**  
-   `python visualize_embedding.py challenge_images/0005.bmp watermarked_groups_images/crispymcmark_0005.bmp`
-
-## Example Python Usage
-
-You can also use the main watermarking, attack, and detection functions directly from Python scripts, without calling them from the command line.
-
-### Embedding a Watermark
-
-```python
-from embedding import embedding
-
-# Embed watermark into an image
-watermarked = embedding(
-    "./challenge_images/0005.bmp",      # Path to original image
-    "crispymcmark.npy"                  # Path to watermark file
-)
-
-# Save the watermarked image
-import cv2
-cv2.imwrite("./watermarked_groups_images/crispymcmark_0005.bmp", watermarked)
-```
-
-### Detecting a Watermark
-
-```python
-from detection_crispymcmark import detection
-
-# Run detection on an attacked image
-detected, wpsnr_val = detection(
-    "./challenge_images/image_name.bmp",                      # Original image
-    "./watermarked_groups_images/image_name_watermarked.bmp", # Watermarked image
-    "./attacked_groups_images/image_name_attacked.bmp"        # Attacked image
-)
-print(f"Detected: {detected}, WPSNR: {wpsnr_val:.2f} dB")
-```
-
-### Applying an Attack
+### Apply Single Attack
 
 ```python
 from attack import attack_config, param_converters
-
 import cv2
-img = cv2.imread("./watermarked_groups_images/crispymcmark_tree.bmp", 0)
 
-# Choose attack by name
-attack_name = "JPEG"  # or any key from attack_config
-strength = 0.9        # value between 0.0 and 1.0
+img = cv2.imread("./watermarked_groups_images/crispymcmark_0002.bmp", 0)
 
-attack_func = attack_config[attack_name]
-params = param_converters[attack_name](strength)
+attack_func = attack_config["JPEG"]
+strength = 0.7
 attacked = attack_func(img, strength)
 
-cv2.imwrite(f"./attacked_groups_images/crispymcmark_crispymcmark_tree_{attack_name}_{params}.bmp", attacked)
+param = param_converters["JPEG"](strength)  # e.g., quality=30
+cv2.imwrite(f"./attacked_0002_JPEG_{param}.bmp", attacked)
 ```
+
+---
+
+## Directory Structure
+
+```
+challenge_images/          # Original images
+watermarked_groups_images/ # Watermarked outputs
+attacked_groups_images/    # Successfully attacked images
+tmp_attacks/               # Binary search temp files
+
+embedding.py               # Embedding logic
+detection_crispymcmark.py  # Detection + hardcoded U_wm, V_wm
+attack.py                  # Attack orchestration
+attack_functions.py        # Attack implementations
+masks.py                   # Region mask generators (was utilities.py)
+wpsnr.py                   # WPSNR metric
+roc_crispymcmark.py        # ROC curve computation
+
+crispy_embedder.py         # CLI: embed watermark
+visualize_embedding.py     # Visualize blocks + singular value changes
+attack_blocks_embedding.py # Spatial binary search (experimental)
+gui_attack.py              # Tkinter GUI for interactive testing
+
+attacks_log.csv            # All attack attempts
+best_attacks_log.csv       # Best attack per image
+logger_crispymcmark.csv    # Detection results log
+
+plot/
+  plot_attacks.py          # Visualize attack parameter space
+  utilities.py             # Mask helpers for plotting
+  visualize_embedding.py   # Embedding visualization
+
+presentation/              # Competition slides + diagrams
+```
+
+---
+
+## Limitations & Future Work
+
+### Current Limitations
+- **Embedding quality depends on image content:** Low-entropy images show visible artifacts
+- **Hardcoded watermark:** Detection only works for our specific watermark (U, V matrices fixed)
+- **Non-blind detection:** Requires original image
+
+### Proposed Improvements
+1. **Redundancy:** Embed multiple copies of each singular value in different blocks
+2. **Adaptive α:** Vary embedding strength per block based on local entropy
+3. **Better block selection:** Use perceptual models instead of SVD entropy
+4. **Explore alternatives:** QIM, spread spectrum in DCT domain
+
+---
 
 ## License
 
 MIT License
+
+---
+
+## References
+
+- **Key Files:**
+  - Embedding: [`embedding.py`](embedding.py), [`crispy_embedder.py`](crispy_embedder.py)
+  - Detection: [`detection_crispymcmark.py`](detection_crispymcmark.py)
+  - Attack: [`attack.py`](attack.py), [`attack_functions.py`](attack_functions.py)
+  - Masks: [`masks.py`](masks.py) (formerly [`utilities.py`](utilities.py))
+  - Metrics: [`wpsnr.py`](wpsnr.py)
+  - ROC: [`roc_crispymcmark.py`](roc_crispymcmark.py)

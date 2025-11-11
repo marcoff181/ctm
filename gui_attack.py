@@ -6,6 +6,7 @@ import numpy as np
 import os
 import ctypes  # For DPI awareness
 from attack import attack_config, param_converters, log_attack, attack_mask
+import masks
 
 # --- Import Attack Functions ---
 try:
@@ -108,15 +109,40 @@ class AttackGUI:
 
     def _load_predefined_masks(self):
         """Load available mask filenames from 'masks/' folder."""
-        mask_dir = os.path.join(os.path.dirname(__file__), "masks")
         masks = ["None"]
+        # Hardcoded: read mask dir from masks.py if available, otherwise fallback
+        try:
+            mask_dir = masks.MASKS_DIR
+        except Exception:
+            mask_dir = os.path.join(os.path.dirname(__file__), "masks")
+
         if os.path.isdir(mask_dir):
             for f in os.listdir(mask_dir):
-                if f.lower().endswith(
-                    (".png", ".bmp", ".jpg", ".jpeg", ".tif", ".tiff")
-                ):
+                if f.lower().endswith((".png", ".bmp", ".jpg", ".jpeg", ".tif", ".tiff")):
                     masks.append(f)
         return masks
+
+    def _resolve_masks_dir(self):
+        """Resolve masks directory.
+
+        Resolution order:
+        1. Environment variable CTM_MASKS_DIR (if set and exists)
+        2. `MASKS_DIR` or `get_masks_dir()` from a `masks` module (if available)
+        3. Fallback to ./masks relative to this file
+        """
+        # Hardcoded: use masks.MASKS_DIR or masks.get_masks_dir() if provided
+        try:
+            if hasattr(masks, "MASKS_DIR") and os.path.isdir(masks.MASKS_DIR):
+                return masks.MASKS_DIR
+            if hasattr(masks, "get_masks_dir"):
+                mdir = masks.get_masks_dir()
+                if mdir and os.path.isdir(mdir):
+                    return mdir
+        except Exception:
+            pass
+
+        # Fallback: relative masks folder next to this file
+        return os.path.join(os.path.dirname(__file__), "masks")
 
     def _on_mask_selected(self):
         """Load the selected mask image or generate mask from function."""
@@ -127,19 +153,16 @@ class AttackGUI:
         # If mask is a function, call it
         if mask_name in self.mask_functions:
             try:
-                import importlib
-                util = importlib.import_module("utilities")
+                # Attack mask uses the attack.py implementation
                 if mask_name == "Attack Mask":
                     mask = attack_mask(self.cv_image_modified)
-                elif mask_name == "Frequency Mask":
-                    func = getattr(util, self.mask_functions[mask_name])
-                    mask = func(self.cv_image_modified)
-                elif mask_name == "Saliency Mask":
-                    func = getattr(util, self.mask_functions[mask_name])
-                    mask = func(self.cv_image_modified)
                 else:
-                    func = getattr(util, self.mask_functions[mask_name])
+                    func_name = self.mask_functions[mask_name]
+                    func = getattr(masks, func_name, None)
+                    if not callable(func):
+                        raise RuntimeError(f"Mask function '{func_name}' not found in masks.py")
                     mask = func(self.cv_image_modified)
+
                 mask = mask.astype(np.uint8)
                 self.mask_image = mask
             except Exception as e:
@@ -147,7 +170,7 @@ class AttackGUI:
                 self.mask_image = None
             return
         # Otherwise, load mask from file
-        mask_dir = os.path.join(os.path.dirname(__file__), "masks")
+        mask_dir = self._resolve_masks_dir()
         mask_path = os.path.join(mask_dir, mask_name)
         if not os.path.exists(mask_path):
             self.mask_image = None

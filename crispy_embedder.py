@@ -1,6 +1,6 @@
 import cv2
 
-from utilities import verify_watermark_extraction
+from plot.utilities import verify_watermark_extraction
 from embedding import embedding, ALPHA as alpha
 from detection_crispymcmark import detection
 from wpsnr import wpsnr

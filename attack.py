@@ -12,7 +12,8 @@ import matplotlib.pyplot as plt
 
 # --- Attack Function Imports ---
 from attack_functions import awgn, blur, sharpening, median, resizing, jpeg_compression
-from utilities import edges_mask, frequency_mask, noisy_mask, entropy_mask, saliency_mask, border_mask, show_images
+from plot.utilities import  show_images
+from masks import edges_mask, frequency_mask, noisy_mask, entropy_mask, saliency_mask, border_mask
 
 # --- Configuration ---
 MIN_WPSNR = 35.0
