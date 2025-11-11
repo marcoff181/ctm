@@ -152,12 +152,12 @@ python roc_crispymcmark.py
 
 2. **Region Masking:**
    - Apply attacks only to specific regions using masks:
-     - [`frequency_mask`](utilities.py) — target mid-frequency DCT/DWT bands
-     - [`entropy_mask`](utilities.py) — target high-entropy blocks (where watermark likely is)
-     - [`edges_mask`](utilities.py) — attack edges (less visible)
-     - [`noisy_mask`](utilities.py) — attack high-variance regions
-     - [`saliency_mask`](utilities.py) — attack non-salient regions
-     - [`border_mask`](utilities.py) — attack image borders
+     - [`frequency_mask`](masks.py) — target mid-frequency DCT/DWT bands
+     - [`entropy_mask`](masks.py) — target high-entropy blocks (where watermark likely is)
+     - [`edges_mask`](masks.py) — attack edges (less visible)
+     - [`noisy_mask`](masks.py) — attack high-variance regions
+     - [`saliency_mask`](masks.py) — attack non-salient regions
+     - [`border_mask`](masks.py) — attack image borders
    - Masking formula: `attacked_img = mask ? attack(img) : img`
 
 3. **Parallelization:**
@@ -175,7 +175,7 @@ python roc_crispymcmark.py
 **Key Files:**
 - [`attack.py`](attack.py) — orchestration, binary search, parallelization
 - [`attack_functions.py`](attack_functions.py) — JPEG, Blur, AWGN, Resize, Median, Sharpen
-- [`utilities.py`](utilities.py) (now [`masks.py`](masks.py)) — mask generators
+- [`masks.py`](masks.py) — mask generators
 
 ---
 
@@ -265,7 +265,7 @@ embedding.py               # Embedding logic
 detection_crispymcmark.py  # Detection + hardcoded U_wm, V_wm
 attack.py                  # Attack orchestration
 attack_functions.py        # Attack implementations
-masks.py                   # Region mask generators (was utilities.py)
+masks.py                   # Region mask generators 
 wpsnr.py                   # WPSNR metric
 roc_crispymcmark.py        # ROC curve computation
 
@@ -280,7 +280,7 @@ logger_crispymcmark.csv    # Detection results log
 
 plot/
   plot_attacks.py          # Visualize attack parameter space
-  utilities.py             # Mask helpers for plotting
+  utilities.py             # helpers for plotting
   visualize_embedding.py   # Embedding visualization
 
 presentation/              # Competition slides + diagrams
@@ -315,6 +315,6 @@ MIT License
   - Embedding: [`embedding.py`](embedding.py), [`crispy_embedder.py`](crispy_embedder.py)
   - Detection: [`detection_crispymcmark.py`](detection_crispymcmark.py)
   - Attack: [`attack.py`](attack.py), [`attack_functions.py`](attack_functions.py)
-  - Masks: [`masks.py`](masks.py) (formerly [`utilities.py`](utilities.py))
+  - Masks: [`masks.py`](masks.py)
   - Metrics: [`wpsnr.py`](wpsnr.py)
   - ROC: [`roc_crispymcmark.py`](roc_crispymcmark.py)
