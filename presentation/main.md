@@ -36,8 +36,8 @@ h1 {
 </div>
 
 ---
-
-immagine con heatmap dei blocchi embeddati
+# Embedding visualization
+![width:500](./watermarked_image_only.png)![width:500](./watermarked_blocks_only.png) 
 
 ---
 <!-- 
